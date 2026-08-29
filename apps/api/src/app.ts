@@ -5,6 +5,10 @@ import type { AppConfig } from "./core/config.js";
 import { createAuthenticateHook } from "./common/guards/auth.guard.js";
 import { globalErrorHandler } from "./common/filters/error.filter.js";
 import { registerHealthModule } from "./modules/health/health.module.js";
+import { registerArticlesModule } from "./modules/articles/articles.module.js";
+import { registerFeedsModule } from "./modules/feeds/feeds.module.js";
+import { registerProfileModule } from "./modules/profile/profile.module.js";
+import { registerStatsModule } from "./modules/stats/stats.module.js";
 
 export async function createApp(config: AppConfig): Promise<FastifyInstance> {
   const app = Fastify({
@@ -36,7 +40,8 @@ function protectedRoutes(config: AppConfig): FastifyPluginAsync {
 }
 
 async function registerModules(app: FastifyInstance) {
-  void app;
-  // Feature modules (articles, feeds, profile, stats) register themselves
-  // here, e.g. `await registerArticlesModule(app);`
+  await registerArticlesModule(app);
+  await registerFeedsModule(app);
+  await registerProfileModule(app);
+  await registerStatsModule(app);
 }

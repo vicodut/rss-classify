@@ -1,0 +1,195 @@
+import { inject, injectable } from "tsyringe";
+import { Effect } from "effect";
+import { articleFromRow, type ArticleRow, type TypedSupabaseClient } from "@rss-agg/db";
+import type { Article, ListArticlesQuery, RateArticleBody } from "@rss-agg/contract";
+import { unwrap } from "../../common/utils/supabase.js";
+import { ScoringService } from "../scoring/scoring.service.js";
+import { ArticleNotFoundError, ProfileNotFoundError } from "./articles.errors.js";
+
+export interface Page<T> {
+  items: T[];
+  nextCursor: string | null;
+}
+
+interface Cursor {
+  score: number | null;
+  id: string;
+}
+
+function encodeCursor(row: Pick<ArticleRow, "predicted_score" | "id">): string {
+  const cursor: Cursor = { score: row.predicted_score, id: row.id };
+  return Buffer.from(JSON.stringify(cursor)).toString("base64url");
+}
+
+function decodeCursor(cursor: string): Cursor {
+  return JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as Cursor;
+}
+
+/**
+ * Any DB failure below is left untyped and surfaces as an Effect defect
+ * (via Effect.orDie) rather than a value in the error channel — it's not
+ * something a caller can meaningfully recover from, so it bubbles up to
+ * Fastify's global error handler as a 500, same as a thrown exception would
+ * in the plain async/await methods on this class.
+ */
+@injectable()
+export class ArticlesService {
+  constructor(@inject(ScoringService) private readonly scoring: ScoringService) {}
+
+  async list(db: TypedSupabaseClient, query: ListArticlesQuery): Promise<Page<Article>> {
+    let builder = db
+      .from("articles")
+      .select("*")
+      .order("predicted_score", { ascending: false, nullsFirst: false })
+      .order("id", { ascending: false })
+      .limit(query.limit + 1);
+
+    if (query.tag) builder = builder.contains("tags", [query.tag]);
+    if (query.source) builder = builder.eq("source", query.source);
+    if (query.sourceId) builder = builder.eq("source_id", query.sourceId);
+    if (query.minScore !== undefined) builder = builder.gte("predicted_score", query.minScore);
+
+    if (query.cursor) {
+      const { score, id } = decodeCursor(query.cursor);
+      builder =
+        score === null
+          ? builder.is("predicted_score", null).lt("id", id)
+          : builder.or(`predicted_score.lt.${score},and(predicted_score.eq.${score},id.lt.${id})`);
+    }
+
+    const rows = unwrap(await builder);
+    const hasMore = rows.length > query.limit;
+    const page = hasMore ? rows.slice(0, query.limit) : rows;
+    const last = page.at(-1);
+
+    return {
+      items: page.map(articleFromRow),
+      nextCursor: hasMore && last ? encodeCursor(last) : null,
+    };
+  }
+
+  async search(db: TypedSupabaseClient, q: string, limit: number): Promise<Page<Article>> {
+    const rows = unwrap(
+      await db
+        .from("articles")
+        .select("*")
+        .textSearch("search_vector", q, { type: "websearch", config: "english" })
+        .order("predicted_score", { ascending: false, nullsFirst: false })
+        .limit(limit),
+    );
+
+    return { items: rows.map(articleFromRow), nextCursor: null };
+  }
+
+  async get(db: TypedSupabaseClient, id: string): Promise<Article | null> {
+    const { data, error } = await db.from("articles").select("*").eq("id", id).maybeSingle();
+    if (error) throw error;
+    return data ? articleFromRow(data) : null;
+  }
+
+  async remove(db: TypedSupabaseClient, id: string): Promise<boolean> {
+    const { data, error } = await db.from("articles").delete().eq("id", id).select("id");
+    if (error) throw error;
+    return (data?.length ?? 0) > 0;
+  }
+
+  async removeRating(db: TypedSupabaseClient, id: string): Promise<Article | null> {
+    const { data, error } = await db
+      .from("articles")
+      .update({ user_rating: null })
+      .eq("id", id)
+      .select("*")
+      .maybeSingle();
+    if (error) throw error;
+    return data ? articleFromRow(data) : null;
+  }
+
+  /**
+   * Rate an article, run the Phase 2 learning update on the user's tag
+   * weights, and recalculate predicted_score for the user's unrated
+   * articles. Uses Effect for the typed not-found errors and the concurrent
+   * recalculation pass (RSS_AGGREGATOR_SPECS.md "Scoring Algorithm" Phase 2).
+   */
+  rate(
+    db: TypedSupabaseClient,
+    id: string,
+    body: RateArticleBody,
+  ): Effect.Effect<Article, ArticleNotFoundError | ProfileNotFoundError> {
+    return Effect.gen(this, function* () {
+      const articleRow = yield* Effect.tryPromise(async () => {
+        const { data, error } = await db.from("articles").select("*").eq("id", id).maybeSingle();
+        if (error) throw error;
+        return data;
+      }).pipe(Effect.orDie);
+      if (!articleRow) return yield* Effect.fail(new ArticleNotFoundError());
+
+      const profileRow = yield* Effect.tryPromise(async () => {
+        const { data, error } = await db.from("user_profiles").select("*").maybeSingle();
+        if (error) throw error;
+        return data;
+      }).pipe(Effect.orDie);
+      if (!profileRow) return yield* Effect.fail(new ProfileNotFoundError());
+
+      const tags = body.tags ?? articleRow.tags;
+      const newTagWeights = this.scoring.learnFromRating(profileRow.tag_weights, tags, body.rating);
+      const weights = { tagWeights: newTagWeights, keywordWeights: profileRow.keyword_weights };
+      const newScore = this.scoring.scoreArticle(
+        { tags, title: articleRow.title, content: articleRow.content },
+        weights,
+      );
+
+      const newTotal = profileRow.total_articles_rated + 1;
+      const newAverage =
+        (profileRow.average_rating * profileRow.total_articles_rated + body.rating) / newTotal;
+
+      yield* Effect.tryPromise(async () => {
+        const { error } = await db
+          .from("user_profiles")
+          .update({
+            tag_weights: newTagWeights,
+            total_articles_rated: newTotal,
+            average_rating: newAverage,
+          })
+          .eq("id", profileRow.id);
+        if (error) throw error;
+      }).pipe(Effect.orDie);
+
+      const updatedRow = yield* Effect.tryPromise(async () => {
+        const { data, error } = await db
+          .from("articles")
+          .update({ tags, user_rating: body.rating, predicted_score: newScore })
+          .eq("id", id)
+          .select("*")
+          .single();
+        if (error) throw error;
+        return data;
+      }).pipe(Effect.orDie);
+
+      const unrated = yield* Effect.tryPromise(async () => {
+        const { data, error } = await db
+          .from("articles")
+          .select("*")
+          .is("user_rating", null)
+          .neq("id", id);
+        if (error) throw error;
+        return data;
+      }).pipe(Effect.orDie);
+
+      yield* Effect.forEach(
+        unrated,
+        (row) =>
+          Effect.tryPromise(async () => {
+            const score = this.scoring.scoreArticle(
+              { tags: row.tags, title: row.title, content: row.content },
+              weights,
+            );
+            const { error } = await db.from("articles").update({ predicted_score: score }).eq("id", row.id);
+            if (error) throw error;
+          }).pipe(Effect.ignore),
+        { concurrency: 5 },
+      );
+
+      return articleFromRow(updatedRow);
+    });
+  }
+}

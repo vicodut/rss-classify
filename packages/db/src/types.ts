@@ -1,4 +1,10 @@
-export interface ArticleRow {
+// These are `type` aliases rather than `interface`s deliberately: the
+// Supabase JS client's generic Database plumbing checks `Row extends
+// Record<string, unknown>` (and similar) internally, and TypeScript only
+// grants object *type aliases* an implicit index signature for that check —
+// `interface`s are treated as open/nominal and fail it, which collapses
+// every `.from(...)` query's inferred type to `never`.
+export type ArticleRow = {
   id: string;
   user_id: string;
   url: string;
@@ -11,9 +17,9 @@ export interface ArticleRow {
   created_at: string;
   published_at: string | null;
   source_id: string | null;
-}
+};
 
-export interface FeedRow {
+export type FeedRow = {
   id: string;
   user_id: string;
   url: string;
@@ -22,18 +28,18 @@ export interface FeedRow {
   last_fetched: string | null;
   is_active: boolean;
   created_at: string;
-}
+};
 
-export interface UserProfileRow {
+export type UserProfileRow = {
   id: string;
   tag_weights: Record<string, number>;
   keyword_weights: Record<string, number>;
   total_articles_rated: number;
   average_rating: number;
   updated_at: string;
-}
+};
 
-export interface Database {
+export type Database = {
   public: {
     Tables: {
       articles: {
@@ -41,17 +47,22 @@ export interface Database {
         Insert: Partial<ArticleRow> &
           Pick<ArticleRow, "user_id" | "url" | "title">;
         Update: Partial<ArticleRow>;
+        Relationships: [];
       };
       feeds: {
         Row: FeedRow;
         Insert: Partial<FeedRow> & Pick<FeedRow, "user_id" | "url">;
         Update: Partial<FeedRow>;
+        Relationships: [];
       };
       user_profiles: {
         Row: UserProfileRow;
         Insert: Partial<UserProfileRow> & Pick<UserProfileRow, "id">;
         Update: Partial<UserProfileRow>;
+        Relationships: [];
       };
     };
+    Views: { [_ in never]: never };
+    Functions: { [_ in never]: never };
   };
-}
+};

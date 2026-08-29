@@ -5,6 +5,7 @@ import { loadConfig } from "./core/config.js";
 loadEnvFile({ path: ".env.local" });
 import { setupDIContainer } from "./core/di-container.js";
 import { createApp } from "./app.js";
+import { startFeedsScheduler } from "./modules/feeds/feeds.scheduler.js";
 
 async function bootstrap() {
   const config = loadConfig();
@@ -14,8 +15,11 @@ async function bootstrap() {
 
   await app.listen({ port: config.PORT, host: "0.0.0.0" });
 
+  const scheduler = startFeedsScheduler(config, app.log);
+
   const shutdown = async () => {
     app.log.info("Shutting down gracefully...");
+    scheduler.cancel();
     await app.close();
     process.exit(0);
   };
