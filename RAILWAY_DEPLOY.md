@@ -10,6 +10,15 @@ made that true and what to watch for on Railway specifically.
 
 ## Prerequisites
 
+- **Node 22 on both services.** The repo pins this via `engines.node` in the root
+  `package.json` and a `.nvmrc`, which Railway's Nixpacks builder should pick up
+  automatically — but verify it, or set it explicitly as an env var on each service:
+  `NIXPACKS_NODE_VERSION=22`. `jsdom` (used for the "add article by URL" feature's Readability
+  extraction) hard-requires Node ≥22 — its own `package.json` declares
+  `"engines": {"node": "^22.22.2 || ^24.15.0 || >=26.0.0"}` — and will crash at server startup
+  on Node 20 with `TypeError: webidl.util.markAsUncloneable is not a function` (reproduced and
+  confirmed fixed locally by running the built bundle under Node 20.20.2 vs 22.22.2). This also
+  clears the `@supabase/supabase-js` Node-20-deprecation warning as a side effect.
 - A Supabase project already provisioned (this app uses Supabase for Postgres + Auth; Railway
   hosts the app code, not the database). You'll need, from the Supabase dashboard:
   - Project URL
