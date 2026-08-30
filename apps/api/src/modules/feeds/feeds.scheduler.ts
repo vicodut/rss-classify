@@ -3,6 +3,7 @@ import { Effect } from "effect";
 import { container } from "tsyringe";
 import type { FastifyBaseLogger } from "fastify";
 import { createServiceRoleClient } from "@rss-agg/db";
+import { toError } from "../../common/utils/supabase.js";
 import type { AppConfig } from "../../core/config.js";
 import type { PreferenceWeights } from "../scoring/scoring.service.js";
 import type { TagKnnSettings } from "../scoring/classification.service.js";
@@ -22,11 +23,11 @@ export async function refreshAllUsersFeeds(config: AppConfig, feedsService: Feed
   });
 
   const { data: feeds, error: feedsError } = await db.from("feeds").select("*").eq("is_active", true);
-  if (feedsError) throw feedsError;
+  if (feedsError) throw toError(feedsError);
   if (!feeds || feeds.length === 0) return;
 
   const { data: profiles, error: profilesError } = await db.from("user_profiles").select("*");
-  if (profilesError) throw profilesError;
+  if (profilesError) throw toError(profilesError);
 
   const weightsByUser = new Map<string, PreferenceWeights>(
     (profiles ?? []).map((p) => [p.id, { tagWeights: p.tag_weights, keywordWeights: p.keyword_weights }]),

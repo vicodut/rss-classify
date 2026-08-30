@@ -4,6 +4,7 @@ import { feedFromRow, type FeedRow, type TypedSupabaseClient } from "@rss-agg/db
 import type { CreateFeedBody, Feed } from "@rss-agg/contract";
 import type { AppConfig } from "../../core/config.js";
 import { APP_CONFIG } from "../../core/types.js";
+import { toError } from "../../common/utils/supabase.js";
 import { ScoringService, type PreferenceWeights } from "../scoring/scoring.service.js";
 import { ClassificationService, type TagKnnSettings } from "../scoring/classification.service.js";
 import { EmbeddingsService, prepareTextForEmbedding } from "../embeddings/embeddings.service.js";
@@ -36,13 +37,13 @@ export class FeedsService {
 
   async list(db: TypedSupabaseClient): Promise<Feed[]> {
     const { data, error } = await db.from("feeds").select("*").order("created_at", { ascending: false });
-    if (error) throw error;
+    if (error) throw toError(error);
     return (data ?? []).map(feedFromRow);
   }
 
   async get(db: TypedSupabaseClient, id: string): Promise<Feed | null> {
     const { data, error } = await db.from("feeds").select("*").eq("id", id).maybeSingle();
-    if (error) throw error;
+    if (error) throw toError(error);
     return data ? feedFromRow(data) : null;
   }
 
@@ -59,14 +60,14 @@ export class FeedsService {
 
     if (error) {
       if (error.code === UNIQUE_VIOLATION) return { conflict: true };
-      throw error;
+      throw toError(error);
     }
     return { feed: feedFromRow(data) };
   }
 
   async remove(db: TypedSupabaseClient, id: string): Promise<boolean> {
     const { data, error } = await db.from("feeds").delete().eq("id", id).select("id");
-    if (error) throw error;
+    if (error) throw toError(error);
     return (data?.length ?? 0) > 0;
   }
 
@@ -105,7 +106,7 @@ export class FeedsService {
                 Effect.gen(this, function* () {
                   const embedding = embeddings[index]!;
                   const tags = yield* Effect.tryPromise(() =>
-                    this.classification.classifyTags(db, feed.user_id, embedding, tagKnn, item.title, item.content),
+                    this.classification.classifyTags(db, feed.user_id, embedding, tagKnn),
                   ).pipe(Effect.orDie);
                   const ratedNeighbors = yield* Effect.tryPromise(() =>
                     this.classification.findRatedNeighbors(db, feed.user_id, embedding, tagKnn.k),
@@ -140,7 +141,7 @@ export class FeedsService {
                 .from("articles")
                 .upsert(rows, { onConflict: "user_id,url", ignoreDuplicates: true })
                 .select("id");
-              if (error) throw error;
+              if (error) throw toError(error);
               return data?.length ?? 0;
             }).pipe(Effect.catchAll(() => Effect.succeed(0)));
 
@@ -172,7 +173,7 @@ export class FeedsService {
           ? db.from("feeds").select("*").eq("id", feedId)
           : db.from("feeds").select("*").eq("is_active", true);
         const { data, error } = await query;
-        if (error) throw error;
+        if (error) throw toError(error);
         return data ?? [];
       }).pipe(Effect.orDie);
 
@@ -182,7 +183,7 @@ export class FeedsService {
 
       const profileRow = yield* Effect.tryPromise(async () => {
         const { data, error } = await db.from("user_profiles").select("*").maybeSingle();
-        if (error) throw error;
+        if (error) throw toError(error);
         return data;
       }).pipe(Effect.orDie);
 

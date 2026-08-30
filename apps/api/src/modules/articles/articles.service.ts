@@ -8,7 +8,7 @@ import {
   type TypedSupabaseClient,
 } from "@rss-agg/db";
 import type { Article, ListArticlesQuery, RateArticleBody, UpdateArticleTagsBody } from "@rss-agg/contract";
-import { unwrap } from "../../common/utils/supabase.js";
+import { toError, unwrap } from "../../common/utils/supabase.js";
 import { ScoringService } from "../scoring/scoring.service.js";
 import { ClassificationService } from "../scoring/classification.service.js";
 import { ArticleNotFoundError, ProfileNotFoundError } from "./articles.errors.js";
@@ -93,13 +93,13 @@ export class ArticlesService {
 
   async get(db: TypedSupabaseClient, id: string): Promise<Article | null> {
     const { data, error } = await db.from("articles").select("*").eq("id", id).maybeSingle();
-    if (error) throw error;
+    if (error) throw toError(error);
     return data ? articleFromRow(data) : null;
   }
 
   async remove(db: TypedSupabaseClient, id: string): Promise<boolean> {
     const { data, error } = await db.from("articles").delete().eq("id", id).select("id");
-    if (error) throw error;
+    if (error) throw toError(error);
     return (data?.length ?? 0) > 0;
   }
 
@@ -110,7 +110,7 @@ export class ArticlesService {
       .eq("id", id)
       .select("*")
       .maybeSingle();
-    if (error) throw error;
+    if (error) throw toError(error);
     return data ? articleFromRow(data) : null;
   }
 
@@ -132,7 +132,7 @@ export class ArticlesService {
       .select("is_saved, is_dismissed")
       .eq("id", id)
       .maybeSingle();
-    if (fetchError) throw fetchError;
+    if (fetchError) throw toError(fetchError);
     if (!current) return null;
 
     const update =
@@ -146,7 +146,7 @@ export class ArticlesService {
       .eq("id", id)
       .select("*")
       .maybeSingle();
-    if (error) throw error;
+    if (error) throw toError(error);
     return data ? articleFromRow(data) : null;
   }
 
@@ -168,14 +168,14 @@ export class ArticlesService {
       .select("*")
       .eq("id", id)
       .maybeSingle();
-    if (articleError) throw articleError;
+    if (articleError) throw toError(articleError);
     if (!articleRow) return null;
 
     const { data: profileRow, error: profileError } = await db
       .from("user_profiles")
       .select("*")
       .maybeSingle();
-    if (profileError) throw profileError;
+    if (profileError) throw toError(profileError);
     if (!profileRow) return null;
 
     const weights = { tagWeights: profileRow.tag_weights, keywordWeights: profileRow.keyword_weights };
@@ -195,8 +195,76 @@ export class ArticlesService {
       .eq("id", id)
       .select("*")
       .maybeSingle();
-    if (error) throw error;
+    if (error) throw toError(error);
     return data ? articleFromRow(data) : null;
+  }
+
+  /**
+   * Manually (re)runs k-NN tag classification over the user's articles that
+   * aren't yet tags_confirmed — both genuinely untagged articles (ingest no
+   * longer auto-tags with a fixed taxonomy, see ClassificationService) and
+   * previously machine-guessed ones, so a re-run benefits from confirmations
+   * made since the last pass. Skips rows with no stored embedding yet (needs
+   * the backfill script). Recomputes predicted_score/reason alongside tags
+   * whenever a confident classification is found; leaves an article
+   * untouched when the classifier still can't confidently tag it.
+   */
+  async classifyUnconfirmed(
+    db: TypedSupabaseClient,
+    userId: string,
+    limit: number,
+  ): Promise<{ candidatesConsidered: number; articlesTagged: number }> {
+    const { data: profileRow, error: profileError } = await db.from("user_profiles").select("*").maybeSingle();
+    if (profileError) throw toError(profileError);
+    if (!profileRow) return { candidatesConsidered: 0, articlesTagged: 0 };
+
+    const weights = { tagWeights: profileRow.tag_weights, keywordWeights: profileRow.keyword_weights };
+    const tagKnn = {
+      k: profileRow.tag_knn_k,
+      minVotes: profileRow.tag_knn_min_votes,
+      similarityFloor: profileRow.tag_knn_similarity_floor,
+    };
+
+    const { data: rows, error } = await db
+      .from("articles")
+      .select("id, embedding, title, content")
+      .eq("tags_confirmed", false)
+      .not("embedding", "is", null)
+      .limit(limit);
+    if (error) throw toError(error);
+    const candidates = rows ?? [];
+
+    let articlesTagged = 0;
+    await Effect.runPromise(
+      Effect.forEach(
+        candidates,
+        (row) =>
+          Effect.tryPromise(async () => {
+            const embedding = parseEmbedding(row.embedding);
+            if (!embedding) return;
+
+            const tags = await this.classification.classifyTags(db, userId, embedding, tagKnn);
+            if (tags.length === 0) return;
+
+            const ratedNeighbors = await this.classification.findRatedNeighbors(db, userId, embedding, tagKnn.k);
+            const { score, reason } = this.scoring.scoreArticle(
+              { tags, title: row.title, content: row.content },
+              weights,
+              ratedNeighbors,
+            );
+
+            const { error: updateError } = await db
+              .from("articles")
+              .update({ tags, predicted_score: score, reason })
+              .eq("id", row.id);
+            if (updateError) throw toError(updateError);
+            articlesTagged++;
+          }).pipe(Effect.ignore),
+        { concurrency: 5 },
+      ),
+    );
+
+    return { candidatesConsidered: candidates.length, articlesTagged };
   }
 
   /**
@@ -213,14 +281,14 @@ export class ArticlesService {
     return Effect.gen(this, function* () {
       const articleRow = yield* Effect.tryPromise(async () => {
         const { data, error } = await db.from("articles").select("*").eq("id", id).maybeSingle();
-        if (error) throw error;
+        if (error) throw toError(error);
         return data;
       }).pipe(Effect.orDie);
       if (!articleRow) return yield* Effect.fail(new ArticleNotFoundError());
 
       const profileRow = yield* Effect.tryPromise(async () => {
         const { data, error } = await db.from("user_profiles").select("*").maybeSingle();
-        if (error) throw error;
+        if (error) throw toError(error);
         return data;
       }).pipe(Effect.orDie);
       if (!profileRow) return yield* Effect.fail(new ProfileNotFoundError());
@@ -253,7 +321,7 @@ export class ArticlesService {
             average_rating: newAverage,
           })
           .eq("id", profileRow.id);
-        if (error) throw error;
+        if (error) throw toError(error);
       }).pipe(Effect.orDie);
 
       const updatedRow = yield* Effect.tryPromise(async () => {
@@ -271,7 +339,7 @@ export class ArticlesService {
           .eq("id", id)
           .select("*")
           .single();
-        if (error) throw error;
+        if (error) throw toError(error);
         return data;
       }).pipe(Effect.orDie);
 
@@ -281,7 +349,7 @@ export class ArticlesService {
           .select("*")
           .is("user_rating", null)
           .neq("id", id);
-        if (error) throw error;
+        if (error) throw toError(error);
         return data;
       }).pipe(Effect.orDie);
 
@@ -302,7 +370,7 @@ export class ArticlesService {
               .from("articles")
               .update({ predicted_score: score, reason })
               .eq("id", row.id);
-            if (error) throw error;
+            if (error) throw toError(error);
           }).pipe(Effect.ignore),
         { concurrency: 5 },
       );

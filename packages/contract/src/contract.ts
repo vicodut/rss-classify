@@ -2,6 +2,8 @@ import { initContract } from "@ts-rest/core";
 import { z } from "zod";
 import {
   articleSchema,
+  classifyArticlesBodySchema,
+  classifyArticlesResultSchema,
   createFeedBodySchema,
   errorResponseSchema,
   feedSchema,
@@ -128,6 +130,17 @@ const articlesContract = c.router(
         404: errorResponseSchema,
       },
       summary: "Toggle whether an article is dismissed from the inbox",
+    },
+    classify: {
+      method: "POST",
+      path: "/articles/classify",
+      body: classifyArticlesBodySchema,
+      responses: {
+        200: classifyArticlesResultSchema,
+        401: errorResponseSchema,
+      },
+      summary:
+        "Manually (re)run k-NN tag classification over the user's not-yet-confirmed articles",
     },
   },
   { baseHeaders: authHeaders },

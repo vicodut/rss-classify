@@ -1,11 +1,6 @@
 import { injectable } from "tsyringe";
-import { DEFAULT_TAGS } from "@rss-agg/contract";
 import type { MatchRatedArticlesRow } from "@rss-agg/db";
 import { average, clamp } from "../../common/utils/math.js";
-
-export const DEFAULT_TAG_WEIGHTS: Record<string, number> = Object.fromEntries(
-  DEFAULT_TAGS.map((tag) => [tag, 0.5]),
-);
 
 export interface ScorableArticle {
   tags: string[];

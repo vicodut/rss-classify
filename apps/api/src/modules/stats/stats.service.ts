@@ -3,6 +3,7 @@ import type { TypedSupabaseClient } from "@rss-agg/db";
 import type { statsSummarySchema, trendingTagSchema } from "@rss-agg/contract";
 import type { z } from "zod";
 import { average } from "../../common/utils/math.js";
+import { toError } from "../../common/utils/supabase.js";
 
 type StatsSummary = z.infer<typeof statsSummarySchema>;
 type TrendingTag = z.infer<typeof trendingTagSchema>;
@@ -34,7 +35,7 @@ export class StatsService {
   async trending(db: TypedSupabaseClient, days: number): Promise<TrendingTag[]> {
     const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
     const { data, error } = await db.from("articles").select("tags, user_rating").gte("created_at", since);
-    if (error) throw error;
+    if (error) throw toError(error);
 
     const byTag = new Map<string, { count: number; ratingSum: number; ratingCount: number }>();
     for (const row of data ?? []) {

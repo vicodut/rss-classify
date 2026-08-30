@@ -4,7 +4,7 @@ import type { Article } from "@rss-agg/contract";
 export const ARTICLES_QUERY_KEY = ["articles", { limit: 500 }] as const;
 export const ARTICLES_QUERY_LIMIT = 500;
 
-export type View = "inbox" | "saved" | "search" | "stats";
+export type View = "inbox" | "saved" | "search" | "stats" | "classify";
 export type Level = "all" | "clear" | "maybe" | "rain";
 export type ArticleLevel = "clear" | "maybe" | "rain";
 export type Sort = "forecast" | "recent" | "rating";

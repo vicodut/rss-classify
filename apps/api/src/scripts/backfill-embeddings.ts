@@ -5,6 +5,7 @@ loadEnvFile({ path: ".env.local" });
 
 import { Effect } from "effect";
 import { createServiceRoleClient } from "@rss-agg/db";
+import { toError } from "../common/utils/supabase.js";
 import { loadConfig } from "../core/config.js";
 import { EmbeddingsService, prepareTextForEmbedding } from "../modules/embeddings/embeddings.service.js";
 
@@ -41,7 +42,7 @@ async function main() {
       .select("id, title, content")
       .is("embedding", null)
       .limit(BATCH_SIZE);
-    if (error) throw error;
+    if (error) throw toError(error);
     if (!rows || rows.length === 0) break;
 
     const vectors = await embeddings.embed(rows.map((row) => prepareTextForEmbedding(row.title, row.content)));
@@ -55,7 +56,7 @@ async function main() {
               .from("articles")
               .update({ embedding: vectors[i], embedding_model: config.EMBEDDING_MODEL })
               .eq("id", row.id);
-            if (updateError) throw updateError;
+            if (updateError) throw toError(updateError);
           }),
         { concurrency: CONCURRENCY },
       ),

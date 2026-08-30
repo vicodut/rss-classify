@@ -67,6 +67,10 @@ export async function registerArticlesModule(app: FastifyInstance) {
       if (!article) return { status: 404, body: { error: { message: "Article not found" } } };
       return { status: 200, body: article };
     },
+    classify: async ({ body, request }) => {
+      const result = await service.classifyUnconfirmed(request.db, request.user.id, body.limit ?? 100);
+      return { status: 200, body: result };
+    },
   });
 
   await app.register(s.plugin(articlesRouter));

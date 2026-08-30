@@ -1,17 +1,5 @@
 import { z } from "zod";
 
-export const DEFAULT_TAGS = [
-  "Tech",
-  "Politics",
-  "Art",
-  "Science",
-  "Sports",
-  "Business",
-  "Health",
-  "Entertainment",
-  "Education",
-] as const;
-
 export const articleSchema = z.object({
   id: z.string().uuid(),
   userId: z.string().uuid(),
@@ -57,6 +45,17 @@ export const updateArticleTagsBodySchema = z.object({
   tags: z.array(z.string()),
 });
 export type UpdateArticleTagsBody = z.infer<typeof updateArticleTagsBodySchema>;
+
+export const classifyArticlesBodySchema = z.object({
+  limit: z.number().int().min(1).max(500).optional(),
+});
+export type ClassifyArticlesBody = z.infer<typeof classifyArticlesBodySchema>;
+
+export const classifyArticlesResultSchema = z.object({
+  candidatesConsidered: z.number(),
+  articlesTagged: z.number(),
+});
+export type ClassifyArticlesResult = z.infer<typeof classifyArticlesResultSchema>;
 
 export const feedSchema = z.object({
   id: z.string().uuid(),

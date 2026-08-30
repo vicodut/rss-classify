@@ -2,7 +2,7 @@ import { inject, injectable } from "tsyringe";
 import type { MatchRatedArticlesRow, TypedSupabaseClient } from "@rss-agg/db";
 import { APP_CONFIG } from "../../core/types.js";
 import type { AppConfig } from "../../core/config.js";
-import { TaggingService } from "./tagging.service.js";
+import { toError } from "../../common/utils/supabase.js";
 
 export interface TagKnnSettings {
   k: number;
@@ -21,25 +21,24 @@ export interface TagKnnSettings {
  */
 @injectable()
 export class ClassificationService {
-  constructor(
-    @inject(APP_CONFIG) private readonly config: AppConfig,
-    @inject(TaggingService) private readonly tagging: TaggingService,
-  ) {}
+  constructor(@inject(APP_CONFIG) private readonly config: AppConfig) {}
 
   /**
-   * Tier 2 (primary, once the user has ≥1 confirmed article): vote across the
-   * K nearest tags_confirmed=true neighbors, gated by a similarity floor so a
-   * cold/unrelated match falls through to Tier 1 instead of forcing a guess.
-   * Tier 1 (fallback): the existing keyword heuristic — permanent cold-start
-   * path, not legacy code.
+   * Votes across the K nearest tags_confirmed=true neighbors, gated by a
+   * similarity floor. There is no fixed tag taxonomy and no keyword-based
+   * fallback — tags are entirely open-ended and only ever come from the
+   * user's own confirmed examples. Returns [] when there isn't yet enough
+   * confirmed history to classify with any confidence (cold start), or when
+   * no tag clears the vote threshold; the caller decides what to do with an
+   * empty result (e.g. leave the article untagged until the user manually
+   * tags something, or a later re-run of /articles/classify picks it up
+   * once more confirmed examples exist).
    */
   async classifyTags(
     db: TypedSupabaseClient,
     userId: string,
     embedding: number[],
     settings: TagKnnSettings,
-    title: string,
-    content: string | null,
   ): Promise<string[]> {
     const { data, error } = await db.rpc("match_confirmed_tags", {
       query_embedding: embedding,
@@ -47,24 +46,21 @@ export class ClassificationService {
       match_model: this.config.EMBEDDING_MODEL,
       match_count: settings.k,
     });
-    if (error) throw error;
+    if (error) throw toError(error);
 
     const neighbors = data ?? [];
     const bestSimilarity = neighbors[0]?.similarity ?? -Infinity;
-    if (neighbors.length > 0 && bestSimilarity >= settings.similarityFloor) {
-      const votes = new Map<string, number>();
-      for (const neighbor of neighbors) {
-        for (const tag of neighbor.tags) {
-          votes.set(tag, (votes.get(tag) ?? 0) + 1);
-        }
-      }
-      const tags = [...votes.entries()]
-        .filter(([, count]) => count >= settings.minVotes)
-        .map(([tag]) => tag);
-      if (tags.length > 0) return tags;
+    if (neighbors.length === 0 || bestSimilarity < settings.similarityFloor) {
+      return [];
     }
 
-    return this.tagging.tagArticle(title, content);
+    const votes = new Map<string, number>();
+    for (const neighbor of neighbors) {
+      for (const tag of neighbor.tags) {
+        votes.set(tag, (votes.get(tag) ?? 0) + 1);
+      }
+    }
+    return [...votes.entries()].filter(([, count]) => count >= settings.minVotes).map(([tag]) => tag);
   }
 
   /** Raw neighbor data for ScoringService's knnScore term — kept pure/DB-free itself. */
@@ -80,7 +76,7 @@ export class ClassificationService {
       match_model: this.config.EMBEDDING_MODEL,
       match_count: k,
     });
-    if (error) throw error;
+    if (error) throw toError(error);
     return data ?? [];
   }
 }

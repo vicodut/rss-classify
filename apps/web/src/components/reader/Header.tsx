@@ -6,6 +6,7 @@ const VIEW_OPTIONS: { value: View; label: string }[] = [
   { value: "saved", label: "Saved" },
   { value: "search", label: "Search" },
   { value: "stats", label: "Stats" },
+  { value: "classify", label: "Classify" },
 ];
 
 interface HeaderProps {

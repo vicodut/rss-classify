@@ -21,6 +21,7 @@ import { SearchFilters } from "../components/reader/SearchFilters";
 import { WhyStrip } from "../components/reader/WhyStrip";
 import { ArticleRow } from "../components/reader/ArticleRow";
 import { StatsView } from "../components/reader/StatsView";
+import { ClassifyView } from "../components/reader/ClassifyView";
 import { PhoneOverlay } from "../components/reader/PhoneOverlay";
 import { useReaderKeyboard } from "../components/reader/useReaderKeyboard";
 
@@ -107,11 +108,13 @@ export function HomePage() {
   const countLabel =
     state.view === "stats"
       ? "last 90 days"
-      : `${visible.length}${state.view === "saved" ? " saved" : " unread"}${
-          state.topic ? " · " + state.topic : ""
-        }`;
+      : state.view === "classify"
+        ? `${articles.filter((a) => !a.tagsConfirmed).length} unconfirmed`
+        : `${visible.length}${state.view === "saved" ? " saved" : " unread"}${
+            state.topic ? " · " + state.topic : ""
+          }`;
 
-  const isList = state.view !== "stats";
+  const isList = state.view !== "stats" && state.view !== "classify";
 
   return (
     <div className="grid h-screen" style={{ gridTemplateRows: "auto 1fr" }}>
@@ -177,6 +180,7 @@ export function HomePage() {
           )}
 
           {!isLoading && !error && state.view === "stats" && <StatsView articles={articles} />}
+          {!isLoading && !error && state.view === "classify" && <ClassifyView articles={articles} />}
         </main>
       </div>
 

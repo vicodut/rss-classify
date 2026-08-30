@@ -2,7 +2,7 @@ import { injectable } from "tsyringe";
 import { profileFromRow, type TypedSupabaseClient, type UserProfileRow } from "@rss-agg/db";
 import type { UpdateProfileBody, UserProfile } from "@rss-agg/contract";
 import { clamp } from "../../common/utils/math.js";
-import { DEFAULT_TAG_WEIGHTS } from "../scoring/scoring.service.js";
+import { toError } from "../../common/utils/supabase.js";
 
 function mergeClamped(
   existing: Record<string, number>,
@@ -25,7 +25,7 @@ function mergeClamped(
 export class ProfileService {
   async get(db: TypedSupabaseClient): Promise<UserProfile> {
     const { data, error } = await db.from("user_profiles").select("*").single();
-    if (error) throw error;
+    if (error) throw toError(error);
     return profileFromRow(data);
   }
 
@@ -46,7 +46,7 @@ export class ProfileService {
       .eq("id", existing.id)
       .select("*")
       .single();
-    if (error) throw error;
+    if (error) throw toError(error);
     return profileFromRow(data);
   }
 
@@ -56,7 +56,7 @@ export class ProfileService {
     const { data, error } = await db
       .from("user_profiles")
       .update({
-        tag_weights: DEFAULT_TAG_WEIGHTS,
+        tag_weights: {},
         keyword_weights: {},
         total_articles_rated: 0,
         average_rating: 0,
@@ -67,13 +67,13 @@ export class ProfileService {
       .eq("id", existing.id)
       .select("*")
       .single();
-    if (error) throw error;
+    if (error) throw toError(error);
     return profileFromRow(data);
   }
 
   private async getRow(db: TypedSupabaseClient): Promise<UserProfileRow> {
     const { data, error } = await db.from("user_profiles").select("*").single();
-    if (error) throw error;
+    if (error) throw toError(error);
     return data;
   }
 }
