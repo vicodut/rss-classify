@@ -10,15 +10,15 @@ export function StatsView({ articles }: StatsViewProps) {
   const { kpis, dist, weeks, topicStats } = useStatsData(articles);
 
   return (
-    <div className="grid gap-[30px] px-[26px] pb-[50px] pt-7">
-      <div className="grid grid-cols-4 gap-[22px]">
+    <div className="grid gap-[26px] px-4 pb-[50px] pt-6 sm:gap-[30px] sm:px-[26px] sm:pt-7">
+      <div className="grid min-w-0 grid-cols-2 gap-[16px] sm:grid-cols-4 sm:gap-[22px]">
         {kpis.map((k) => (
           <KpiTile key={k.label} kpi={k} valueSize={40} />
         ))}
       </div>
 
-      <div className="grid grid-cols-2 gap-[30px]">
-        <div>
+      <div className="grid min-w-0 grid-cols-1 gap-[26px] sm:grid-cols-2 sm:gap-[30px]">
+        <div className="min-w-0">
           <h4 className="mb-4 text-[15px] uppercase tracking-[.1em]">Rating distribution</h4>
           <div className="grid gap-[9px]">
             {dist.map((d) => (
@@ -53,7 +53,7 @@ export function StatsView({ articles }: StatsViewProps) {
           </div>
         </div>
 
-        <div>
+        <div className="min-w-0">
           <h4 className="mb-4 text-[15px] uppercase tracking-[.1em]">Reading volume · 12 weeks</h4>
           <div className="flex h-[132px] items-end gap-[6px] border-b border-[var(--color-divider)]">
             {weeks.map((w, i) => (
@@ -79,9 +79,10 @@ export function StatsView({ articles }: StatsViewProps) {
         </div>
       </div>
 
-      <div>
+      <div className="min-w-0">
         <h4 className="mb-3 text-[15px] uppercase tracking-[.1em]">Forecast accuracy by classification</h4>
-        <table className="w-full border-collapse text-[14px]">
+        <div className="min-w-0 overflow-x-auto">
+        <table className="w-full min-w-[560px] border-collapse text-[14px]">
           <thead>
             <tr>
               <th className="border-b border-[var(--color-divider)] p-[6.8px] text-left text-[11px] uppercase tracking-[.08em] text-[color-mix(in_srgb,var(--color-text)_60%,transparent)]">
@@ -134,6 +135,7 @@ export function StatsView({ articles }: StatsViewProps) {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );

@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import type { Article } from "@rss-agg/contract";
 import { tsr } from "../lib/api-client";
 import { supabase } from "../lib/supabase";
@@ -22,12 +21,12 @@ import { WhyStrip } from "../components/reader/WhyStrip";
 import { ArticleRow } from "../components/reader/ArticleRow";
 import { StatsView } from "../components/reader/StatsView";
 import { ClassifyView } from "../components/reader/ClassifyView";
-import { PhoneOverlay } from "../components/reader/PhoneOverlay";
+import { FeedsView } from "../components/reader/FeedsView";
+import { ForecastOverview } from "../components/reader/ForecastOverview";
 import { useReaderKeyboard } from "../components/reader/useReaderKeyboard";
 
 export function HomePage() {
   const [state, setState] = useState<ReaderState>(initialReaderState);
-  const queryClient = useQueryClient();
 
   const { data, isLoading, error } = tsr.articles.list.useQuery({
     queryKey: ARTICLES_QUERY_KEY,
@@ -40,13 +39,14 @@ export function HomePage() {
 
   const articlesById = useMemo(() => new Map(articles.map((a) => [a.id, a])), [articles]);
   const visible = useMemo(() => visibleArticles(articles, state), [articles, state]);
-  const selArticle =
-    (state.selId && articlesById.get(state.selId)) || visible[0] || articles[0] || null;
+  // Selected article must come from the current view's filtered list, not
+  // the full unfiltered set — otherwise switching to an empty view (e.g.
+  // forecast with nothing new left) kept showing whatever was last focused
+  // elsewhere, which reads as a stale "why" panel for an article that isn't
+  // even in the list beneath it.
+  const selArticle = visible.find((a) => a.id === state.selId) ?? visible[0] ?? null;
 
-  const { rate, toggleSave, toggleDismiss } = useArticleMutations();
-
-  const createFeed = tsr.feeds.create.useMutation();
-  const refreshFeed = tsr.feeds.refresh.useMutation();
+  const { rate, toggleSave, dismiss, updateTags } = useArticleMutations();
 
   function setView(view: View) {
     setState((s) => ({ ...s, view }));
@@ -69,29 +69,6 @@ export function HomePage() {
   function select(id: string) {
     setState((s) => ({ ...s, selId: id }));
   }
-  function setMobile(mobile: boolean) {
-    setState((s) => ({ ...s, mobile }));
-  }
-
-  function handleAddLink() {
-    const url = window.prompt("Feed URL (RSS/Atom)");
-    if (!url) return;
-    createFeed.mutate(
-      { body: { url } },
-      {
-        onSuccess: (res) => {
-          if (res.status !== 201) return;
-          refreshFeed.mutate(
-            { body: { feedId: res.body.id } },
-            { onSuccess: () => queryClient.invalidateQueries({ queryKey: ["articles"] }) },
-          );
-        },
-        onError: (err) => {
-          window.alert(apiErrorMessage(err, "Could not add that feed."));
-        },
-      },
-    );
-  }
 
   useReaderKeyboard({
     visible,
@@ -100,9 +77,7 @@ export function HomePage() {
     onSelect: select,
     onRate: rate,
     onToggleSave: toggleSave,
-    onDismiss: toggleDismiss,
-    mobile: state.mobile,
-    onCloseMobile: () => setMobile(false),
+    onDismiss: dismiss,
   });
 
   const countLabel =
@@ -110,25 +85,28 @@ export function HomePage() {
       ? "last 90 days"
       : state.view === "classify"
         ? `${articles.filter((a) => !a.tagsConfirmed).length} unconfirmed`
-        : `${visible.length}${state.view === "saved" ? " saved" : " unread"}${
-            state.topic ? " · " + state.topic : ""
-          }`;
+        : state.view === "feeds"
+          ? "feed sources"
+          : `${visible.length}${
+              state.view === "saved" ? " saved" : state.view === "forecast" ? " new" : " unread"
+            }${state.topic ? " · " + state.topic : ""}`;
 
-  const isList = state.view !== "stats" && state.view !== "classify";
+  const isList = state.view !== "stats" && state.view !== "classify" && state.view !== "feeds";
 
   return (
-    <div className="grid h-screen" style={{ gridTemplateRows: "auto 1fr" }}>
+    <div className="grid h-screen min-w-0 overflow-x-hidden" style={{ gridTemplateRows: "auto 1fr" }}>
       <Header
         view={state.view}
         onChangeView={setView}
         countLabel={countLabel}
-        onTogglePhone={() => setMobile(!state.mobile)}
-        onAddLink={handleAddLink}
+        onAddLink={() => setView("feeds")}
         onSignOut={() => supabase.auth.signOut()}
       />
 
-      <div className="grid min-h-0" style={{ gridTemplateColumns: "minmax(0, 210px) minmax(0, 1fr)" }}>
-        <NavRail articles={articles} topic={state.topic} onPickTopic={setTopic} />
+      <div className="grid min-h-0 md:grid-cols-[minmax(0,210px)_minmax(0,1fr)]">
+        <div className="hidden md:block">
+          <NavRail articles={articles} topic={state.topic} onPickTopic={setTopic} />
+        </div>
 
         <main className="reader-scroll min-w-0 overflow-y-auto">
           {isLoading && (
@@ -155,9 +133,22 @@ export function HomePage() {
             />
           )}
 
+          {!isLoading && !error && state.view === "forecast" && (
+            <ForecastOverview
+              newArticles={visible}
+              selectedId={selArticle?.id ?? null}
+              onSelect={select}
+              onRate={rate}
+              onSave={toggleSave}
+              onDismiss={dismiss}
+            />
+          )}
+
           {!isLoading && !error && isList && (
             <>
-              {selArticle && <WhyStrip article={selArticle} />}
+              {selArticle && (
+                <WhyStrip article={selArticle} onUpdateTags={(tags) => updateTags(selArticle, tags)} />
+              )}
               <div>
                 {visible.map((a) => (
                   <ArticleRow
@@ -167,7 +158,7 @@ export function HomePage() {
                     onSelect={() => select(a.id)}
                     onRate={(v) => rate(a, v)}
                     onSave={() => toggleSave(a)}
-                    onDismiss={() => toggleDismiss(a)}
+                    onDismiss={() => dismiss(a)}
                   />
                 ))}
                 {visible.length === 0 && (
@@ -181,24 +172,9 @@ export function HomePage() {
 
           {!isLoading && !error && state.view === "stats" && <StatsView articles={articles} />}
           {!isLoading && !error && state.view === "classify" && <ClassifyView articles={articles} />}
+          {!isLoading && !error && state.view === "feeds" && <FeedsView articles={articles} />}
         </main>
       </div>
-
-      {state.mobile && (
-        <PhoneOverlay
-          view={state.view}
-          onChangeView={setView}
-          onClose={() => setMobile(false)}
-          rows={visible}
-          allArticles={articles}
-          selId={selArticle?.id ?? null}
-          onSelect={select}
-          onRate={rate}
-          onSave={toggleSave}
-          onDismiss={toggleDismiss}
-          countLabel={countLabel}
-        />
-      )}
     </div>
   );
 }

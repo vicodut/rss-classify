@@ -31,7 +31,8 @@ export function useArticleMutations() {
   const rateMutation = tsr.articles.rate.useMutation();
   const removeRatingMutation = tsr.articles.removeRating.useMutation();
   const toggleSaveMutation = tsr.articles.toggleSave.useMutation();
-  const toggleDismissMutation = tsr.articles.toggleDismiss.useMutation();
+  const dismissMutation = tsr.articles.dismiss.useMutation();
+  const updateTagsMutation = tsr.articles.updateTags.useMutation();
 
   /** Clicking the currently-set rating pip clears the rating (no "0" value on the rate endpoint). */
   function rate(article: Article, value: number) {
@@ -55,12 +56,24 @@ export function useArticleMutations() {
     );
   }
 
-  function toggleDismiss(article: Article) {
-    toggleDismissMutation.mutate(
+  function dismiss(article: Article) {
+    dismissMutation.mutate(
       { params: { id: article.id }, body: {} },
       { onSuccess: (res) => res.status === 200 && patchArticle(res.body) },
     );
   }
 
-  return { rate, toggleSave, toggleDismiss };
+  /**
+   * Full-replacement, matches the backend's semantics — sets
+   * tags_confirmed=true, making this article eligible as a k-NN neighbor
+   * for future classification/scoring (see updateTags in articles.service.ts).
+   */
+  function updateTags(article: Article, tags: string[]) {
+    updateTagsMutation.mutate(
+      { params: { id: article.id }, body: { tags } },
+      { onSuccess: (res) => res.status === 200 && patchArticle(res.body) },
+    );
+  }
+
+  return { rate, toggleSave, dismiss, updateTags };
 }

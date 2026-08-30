@@ -99,14 +99,36 @@ export class FeedsService {
           }),
         onSuccess: (parsed) =>
           Effect.gen(this, function* () {
+            // Classification (embedding + tag extraction + scoring) only
+            // runs for items this user hasn't seen before — an RSS feed
+            // re-lists its last N items on every poll, so without this
+            // filter already-known articles would get needlessly
+            // reclassified (and their tags silently recomputed, even though
+            // the later upsert's ignoreDuplicates leaves the stored row
+            // untouched) on every refresh cycle.
+            const existingUrls = yield* Effect.tryPromise(async () => {
+              if (parsed.items.length === 0) return new Set<string>();
+              const { data, error } = await db
+                .from("articles")
+                .select("url")
+                .eq("user_id", feed.user_id)
+                .in(
+                  "url",
+                  parsed.items.map((item) => item.url),
+                );
+              if (error) throw toError(error);
+              return new Set((data ?? []).map((row) => row.url));
+            }).pipe(Effect.orDie);
+            const newItems = parsed.items.filter((item) => !existingUrls.has(item.url));
+
             // One batched model call for every new item in this feed, not
             // one call per item.
             const embeddings = yield* Effect.tryPromise(() =>
-              this.embeddings.embed(parsed.items.map((item) => prepareTextForEmbedding(item.title, item.content))),
+              this.embeddings.embed(newItems.map((item) => prepareTextForEmbedding(item.title, item.content))),
             ).pipe(Effect.orDie);
 
             const rows = yield* Effect.forEach(
-              parsed.items,
+              newItems,
               (item, index) =>
                 Effect.gen(this, function* () {
                   const embedding = embeddings[index]!;
@@ -154,7 +176,7 @@ export class FeedsService {
 
             return {
               feedId: feed.id,
-              articlesFetched: rows.length,
+              articlesFetched: parsed.items.length,
               articlesCreated: created,
               error: null,
             };

@@ -46,14 +46,24 @@ export const updateArticleTagsBodySchema = z.object({
 });
 export type UpdateArticleTagsBody = z.infer<typeof updateArticleTagsBodySchema>;
 
+export const addArticleLinkBodySchema = z.object({
+  url: z.string().url(),
+});
+export type AddArticleLinkBody = z.infer<typeof addArticleLinkBodySchema>;
+
 export const classifyArticlesBodySchema = z.object({
+  // "tags": content -> TF-IDF tag extraction -> score. "ratings": k-NN over
+  // rated neighbors -> score only, tags untouched. Kept as two explicit
+  // modes on one endpoint rather than inferring intent, since they touch
+  // different columns and candidate sets.
+  mode: z.enum(["tags", "ratings"]),
   limit: z.number().int().min(1).max(500).optional(),
 });
 export type ClassifyArticlesBody = z.infer<typeof classifyArticlesBodySchema>;
 
 export const classifyArticlesResultSchema = z.object({
   candidatesConsidered: z.number(),
-  articlesTagged: z.number(),
+  articlesUpdated: z.number(),
 });
 export type ClassifyArticlesResult = z.infer<typeof classifyArticlesResultSchema>;
 

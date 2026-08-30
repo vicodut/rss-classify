@@ -1,6 +1,7 @@
 import { initContract } from "@ts-rest/core";
 import { z } from "zod";
 import {
+  addArticleLinkBodySchema,
   articleSchema,
   classifyArticlesBodySchema,
   classifyArticlesResultSchema,
@@ -120,7 +121,7 @@ const articlesContract = c.router(
       },
       summary: "Toggle whether an article is saved for later",
     },
-    toggleDismiss: {
+    dismiss: {
       method: "POST",
       path: "/articles/:id/dismiss",
       body: z.object({}).optional(),
@@ -129,7 +130,7 @@ const articlesContract = c.router(
         401: errorResponseSchema,
         404: errorResponseSchema,
       },
-      summary: "Toggle whether an article is dismissed from the inbox",
+      summary: "Dismiss an article from the inbox (idempotent)",
     },
     classify: {
       method: "POST",
@@ -141,6 +142,19 @@ const articlesContract = c.router(
       },
       summary:
         "Manually (re)run k-NN tag classification over the user's not-yet-confirmed articles",
+    },
+    addLink: {
+      method: "POST",
+      path: "/articles/link",
+      body: addArticleLinkBodySchema,
+      responses: {
+        201: articleSchema,
+        401: errorResponseSchema,
+        404: errorResponseSchema,
+        409: errorResponseSchema,
+        422: errorResponseSchema,
+      },
+      summary: "Add a single article directly by URL, without subscribing to its feed",
     },
   },
   { baseHeaders: authHeaders },

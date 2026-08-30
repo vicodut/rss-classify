@@ -8,6 +8,7 @@ import {
   levelOf,
 } from "../../lib/reader";
 import { WeatherIcon } from "./WeatherIcon";
+import { PhoneArticleRow } from "./PhoneArticleRow";
 
 interface ArticleRowProps {
   article: Article;
@@ -18,7 +19,25 @@ interface ArticleRowProps {
   onDismiss: () => void;
 }
 
-export function ArticleRow({ article, selected, onSelect, onRate, onSave, onDismiss }: ArticleRowProps) {
+/**
+ * Two layouts in one component, toggled by breakpoint (CSS only, no JS
+ * media-query state) rather than a manual "phone view" toggle: the dense
+ * single-row desktop grid below `sm`, or the already-built stacked
+ * PhoneArticleRow layout (bigger touch targets, wrapped title) at `sm` and
+ * above. Every call site gets both for free without knowing which renders.
+ */
+export function ArticleRow(props: ArticleRowProps) {
+  return (
+    <>
+      <div className="sm:hidden">
+        <PhoneArticleRow {...props} />
+      </div>
+      <DesktopArticleRow {...props} />
+    </>
+  );
+}
+
+function DesktopArticleRow({ article, selected, onSelect, onRate, onSave, onDismiss }: ArticleRowProps) {
   const score = displayScore(article);
   const level = levelOf(score);
   const rating = article.userRating ?? 0;
@@ -32,7 +51,7 @@ export function ArticleRow({ article, selected, onSelect, onRate, onSave, onDism
         window.open(article.url, "_blank", "noopener");
       }}
       className={cn(
-        "grid h-[52px] cursor-pointer items-center gap-[14px] border-b border-[color-mix(in_srgb,var(--color-text)_8%,transparent)] pr-5 border-l-[3px]",
+        "hidden h-[52px] cursor-pointer items-center gap-[14px] border-b border-[color-mix(in_srgb,var(--color-text)_8%,transparent)] pr-5 border-l-[3px] sm:grid",
         "hover:bg-[color-mix(in_srgb,var(--color-text)_4%,transparent)]",
         selected
           ? "bg-[color-mix(in_srgb,var(--color-accent)_9%,transparent)] border-l-[var(--color-accent)]"

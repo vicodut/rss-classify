@@ -26,10 +26,56 @@ const STOPWORDS = new Set([
   "quoi", "dont", "ne", "pas", "plus", "très", "tout", "tous", "toute", "toutes",
   "au", "aux", "par", "se", "ça", "cela", "être", "avoir", "fait", "faire", "comme",
   "si", "on", "en", "y", "aussi", "alors", "donc", "ainsi",
+  // Generic verbs/pronouns/fillers that surface as false positives on very
+  // short content (an RSS feed that only gives a title-length snippet, with
+  // nothing else to distinguish a topical word from ordinary sentence
+  // filler by frequency alone).
+  "would", "could", "actually", "instead", "take", "takes", "took",
+  "taking", "taken", "look", "looks", "looking", "looked", "yourself", "myself",
+  "himself", "herself", "itself", "themselves", "lose", "loses", "losing", "lost",
+  "let", "lets", "letting", "still", "even", "ever",
+  "never", "always", "really", "maybe", "perhaps", "something", "someone",
+  "anything", "anyone", "everything", "everyone", "nothing", "nobody", "thing",
+  "things", "part", "parts", "kind", "kinds", "sort", "sorts", "give", "gives",
+  "given", "giving", "gave", "come", "comes", "came", "coming", "go", "goes",
+  "went", "going", "gone", "know", "knows", "knew", "known", "knowing", "think",
+  "thinks", "thought", "thinking", "want", "wants", "wanted", "wanting", "need",
+  "needs", "needed", "needing", "put", "puts", "putting", "set", "sets", "setting",
 ]);
 
 const MIN_TERM_LENGTH = 3;
 const DEFAULT_MAX_TAGS = 3;
+const MIN_RELEVANT_FREQUENCY = 2;
+
+// Also hand-rolled, for the same reason as STOPWORDS: a generic
+// languages-and-frameworks package wouldn't know this corpus's own
+// ecosystem-specific names (Ecto, Broadway, Livebook, Req, Zeropod, ...).
+// Membership only ever reorders terms extractTags already decided were
+// significant for this article via TF-IDF — it never adds a tag that
+// wasn't already going to be extracted, so a false-positive/omission here
+// only affects ranking, not which words can become tags at all.
+const TECH_TERMS = new Set([
+  "python", "javascript", "typescript", "java", "kotlin", "swift", "ruby", "golang",
+  "rust", "elixir", "erlang", "clojure", "scala", "haskell", "perl", "lua", "dart",
+  "php", "csharp", "cpp", "julia", "bash", "shell", "sql", "html", "css", "assembly",
+  "fortran", "cobol", "matlab", "groovy", "zig", "nim", "crystal", "ocaml", "fsharp",
+  "react", "reactjs", "vue", "vuejs", "angular", "svelte", "sveltekit", "nextjs",
+  "nuxt", "remix", "django", "flask", "fastapi", "rails", "laravel", "symfony",
+  "spring", "springboot", "express", "nestjs", "phoenix", "liveview", "ecto",
+  "absinthe", "broadway", "oban", "plug", "cowboy", "bandit", "nerves", "livebook",
+  "mix", "hex", "iex", "req", "tensorflow", "pytorch", "keras", "numpy", "pandas",
+  "scikit", "docker", "kubernetes", "kubectl", "terraform", "ansible", "puppet",
+  "chef", "vagrant", "jenkins", "circleci", "travis", "gitlab", "github", "git",
+  "npm", "yarn", "pnpm", "webpack", "vite", "babel", "eslint", "prettier", "jest",
+  "mocha", "cypress", "playwright", "selenium", "postgres", "postgresql", "mysql",
+  "mongodb", "redis", "sqlite", "cassandra", "elasticsearch", "kafka", "rabbitmq",
+  "graphql", "grpc", "websocket", "websockets", "nginx", "apache", "linux", "ubuntu",
+  "debian", "macos", "windows", "aws", "gcp", "azure", "cloudflare", "vercel",
+  "netlify", "heroku", "supabase", "firebase", "wordpress", "figma", "tailwind",
+  "tailwindcss", "bootstrap", "sass", "less", "electron", "flutter", "xamarin",
+  "unity", "unreal", "onnx", "huggingface", "openai", "anthropic", "llm", "chatgpt",
+  "zeropod",
+]);
 
 export interface CorpusStats {
   documentFrequency: Map<string, number>;
@@ -138,9 +184,20 @@ export class KeywordTaggingService {
         const idf = Math.log((corpus.totalDocuments + 1) / (df + 1)) + 1;
         const forms = displayForms.get(term)!;
         const mostCommonDisplay = [...forms.entries()].sort((a, b) => b[1] - a[1])[0]![0];
-        return { display: capitalize(mostCommonDisplay), score: freq * idf };
+        return { display: capitalize(mostCommonDisplay), score: freq * idf, isTech: TECH_TERMS.has(term), freq };
       })
-      .sort((a, b) => b.score - a.score);
+      // maxTags is a cap, not a quota: on short content (an RSS feed that
+      // only gives a title-length snippet), every word appears once, so
+      // TF-IDF score can't tell a topical word from ordinary sentence
+      // filler — they tie. A term mentioned only once isn't a strong
+      // enough signal of what the article is actually about; requiring a
+      // repeat is what actually discriminates. Known languages/tools are
+      // exempt: naming a real technology is relevant even mentioned once.
+      .filter((s) => s.isTech || s.freq >= MIN_RELEVANT_FREQUENCY)
+      // A programming language or tool always ranks ahead of a generic term,
+      // regardless of relative TF-IDF score — within each of those two
+      // groups, still most-distinctive-first.
+      .sort((a, b) => (a.isTech === b.isTech ? b.score - a.score : a.isTech ? -1 : 1));
 
     const tags: string[] = [];
     const seen = new Set<string>();

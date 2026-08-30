@@ -19,10 +19,12 @@ interface PhoneArticleRowProps {
 }
 
 /**
- * The prototype's phone row template omits a click-to-open handler even
- * though its shared row data includes one (desktop wires it, phone doesn't).
- * Kept tappable here for consistency with the documented interaction table
- * ("Click a row" opens + selects, applies globally) — see final report.
+ * Tap selects only — doesn't open the URL. On mobile, WhyStrip's "Open
+ * original" button (full-width, always visible once a row is selected) is
+ * the explicit way to open an article; auto-opening on tap as well makes
+ * the row itself a mis-tap hazard and is redundant with that button.
+ * Desktop's ArticleRow keeps click-to-open (no separate button visible
+ * without selecting first there, and hover affordance makes intent clearer).
  */
 export function PhoneArticleRow({
   article,
@@ -40,12 +42,9 @@ export function PhoneArticleRow({
 
   return (
     <div
-      onClick={() => {
-        onSelect();
-        window.open(article.url, "_blank", "noopener");
-      }}
+      onClick={onSelect}
       className={cn(
-        "grid cursor-pointer gap-[10px] border-b border-[color-mix(in_srgb,var(--color-text)_8%,transparent)] border-l-[3px] px-[18px] py-[13px]",
+        "grid cursor-pointer items-start gap-[10px] border-b border-[color-mix(in_srgb,var(--color-text)_8%,transparent)] border-l-[3px] px-[18px] py-[13px]",
         selected ? "border-l-[var(--color-accent)]" : "border-l-transparent",
         article.isDismissed && "opacity-40",
       )}

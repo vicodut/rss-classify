@@ -41,7 +41,7 @@ export function SearchFilters({
   onSortChange,
 }: SearchFiltersProps) {
   return (
-    <div className="grid gap-4 border-b border-[var(--color-divider)] px-[22px] pb-[18px] pt-[22px]">
+    <div className="grid gap-4 border-b border-[var(--color-divider)] px-4 pb-[18px] pt-4 sm:px-[22px] sm:pt-[22px]">
       <input
         type="text"
         placeholder="Search titles, sources, notes"

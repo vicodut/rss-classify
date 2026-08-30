@@ -4,7 +4,7 @@ import type { Article } from "@rss-agg/contract";
 export const ARTICLES_QUERY_KEY = ["articles", { limit: 500 }] as const;
 export const ARTICLES_QUERY_LIMIT = 500;
 
-export type View = "inbox" | "saved" | "search" | "stats" | "classify";
+export type View = "forecast" | "pool" | "saved" | "search" | "stats" | "classify" | "feeds";
 export type Level = "all" | "clear" | "maybe" | "rain";
 export type ArticleLevel = "clear" | "maybe" | "rain";
 export type Sort = "forecast" | "recent" | "rating";
@@ -17,18 +17,16 @@ export interface ReaderState {
   minRating: number; // 0-5, 0 = any
   sort: Sort;
   selId: string | null;
-  mobile: boolean;
 }
 
 export const initialReaderState: ReaderState = {
-  view: "inbox",
+  view: "forecast",
   topic: null,
   query: "",
   level: "all",
   minRating: 0,
   sort: "forecast",
   selId: null,
-  mobile: false,
 };
 
 /** 0-100 display score, mapped from the backend's 0-5 predictedScore. */
@@ -97,7 +95,12 @@ function articleTimestamp(article: Article): number {
 export function visibleArticles(articles: Article[], state: ReaderState): Article[] {
   const q = state.query.trim().toLowerCase();
   let list = articles.filter((a) => {
-    if (state.view === "inbox" && a.isDismissed) return false;
+    // "pool" = the active queue, everything not dismissed (matches the old
+    // "inbox" behaviour). "forecast" is a stricter subset of that: also
+    // excludes anything already rated — new/undecided articles only, since
+    // the forecast page's whole point is "what haven't I looked at yet."
+    if (state.view === "pool" && a.isDismissed) return false;
+    if (state.view === "forecast" && (a.isDismissed || a.userRating !== null)) return false;
     if (state.view === "saved" && !a.isSaved) return false;
     if (state.topic && !a.tags.includes(state.topic)) return false;
     if (state.view === "search") {
@@ -110,7 +113,7 @@ export function visibleArticles(articles: Article[], state: ReaderState): Articl
     return true;
   });
 
-  const by = state.view === "search" ? state.sort : "forecast";
+  const by = state.view === "search" ? state.sort : "recent";
   if (by === "forecast") {
     list = [...list].sort((x, y) => displayScore(y) - displayScore(x));
   } else if (by === "recent") {
@@ -130,6 +133,6 @@ export function topicCounts(articles: Article[]): { name: string; count: number 
     }
   }
   return [...counts.entries()]
-    .sort((a, b) => b[1] - a[1])
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .map(([name, count]) => ({ name, count }));
 }

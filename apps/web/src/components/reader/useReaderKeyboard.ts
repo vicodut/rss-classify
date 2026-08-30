@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import type { Article } from "@rss-agg/contract";
 
 interface UseReaderKeyboardParams {
@@ -9,31 +9,31 @@ interface UseReaderKeyboardParams {
   onRate: (article: Article, value: number) => void;
   onToggleSave: (article: Article) => void;
   onDismiss: (article: Article) => void;
-  mobile: boolean;
-  onCloseMobile: () => void;
 }
 
 /**
  * Port of Reader.dc.html's componentDidMount onKey handler: bound on window,
  * no-ops when typing in an input/textarea, moves selection with J/K, rates
- * 1-5, toggles save with S, dismisses + advances with X, opens with Enter,
- * closes the phone overlay with Escape.
+ * 1-5, toggles save with S, dismisses + advances with X, opens with Enter.
+ *
+ * The listener is subscribed once (empty deps) and reads every value through
+ * a ref updated on every render, rather than being re-subscribed whenever
+ * `visible`/`selId` change — with the old approach, key-repeat firing faster
+ * than React's effect-cleanup/resubscribe cycle meant a second "x" press hit
+ * the same stale `selId`/`visible` as the first, re-dismissing (toggling
+ * back) the same already-selected article instead of advancing to the next
+ * one, so rapid X presses removed far fewer articles than were pressed.
  */
-export function useReaderKeyboard({
-  visible,
-  selId,
-  articlesById,
-  onSelect,
-  onRate,
-  onToggleSave,
-  onDismiss,
-  mobile,
-  onCloseMobile,
-}: UseReaderKeyboardParams) {
+export function useReaderKeyboard(params: UseReaderKeyboardParams) {
+  const paramsRef = useRef(params);
+  paramsRef.current = params;
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const target = e.target as HTMLElement | null;
       if (target && /INPUT|TEXTAREA/.test(target.tagName)) return;
+
+      const { visible, selId, articlesById, onSelect, onRate, onToggleSave, onDismiss } = paramsRef.current;
 
       const list = visible;
       const i = list.findIndex((a) => a.id === selId);
@@ -59,12 +59,10 @@ export function useReaderKeyboard({
         }
       } else if (e.key === "Enter") {
         if (selected) window.open(selected.url, "_blank", "noopener");
-      } else if (e.key === "Escape" && mobile) {
-        onCloseMobile();
       }
     }
 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [visible, selId, articlesById, onSelect, onRate, onToggleSave, onDismiss, mobile, onCloseMobile]);
+  }, []);
 }
