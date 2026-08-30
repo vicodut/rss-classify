@@ -20,6 +20,9 @@ export type ArticleRow = {
   is_saved: boolean;
   is_dismissed: boolean;
   reason: string | null;
+  embedding: string | number[] | null;
+  embedding_model: string | null;
+  tags_confirmed: boolean;
 };
 
 export type FeedRow = {
@@ -40,6 +43,18 @@ export type UserProfileRow = {
   total_articles_rated: number;
   average_rating: number;
   updated_at: string;
+  tag_knn_k: number;
+  tag_knn_min_votes: number;
+  tag_knn_similarity_floor: number;
+};
+
+export type MatchConfirmedTagsRow = { tags: string[]; similarity: number };
+export type MatchRatedArticlesRow = { user_rating: number; similarity: number };
+type MatchArgs = {
+  query_embedding: number[];
+  match_user_id: string;
+  match_model: string;
+  match_count: number;
 };
 
 export type Database = {
@@ -66,6 +81,15 @@ export type Database = {
       };
     };
     Views: { [_ in never]: never };
-    Functions: { [_ in never]: never };
+    Functions: {
+      match_confirmed_tags: {
+        Args: MatchArgs;
+        Returns: MatchConfirmedTagsRow[];
+      };
+      match_rated_articles: {
+        Args: MatchArgs;
+        Returns: MatchRatedArticlesRow[];
+      };
+    };
   };
 };

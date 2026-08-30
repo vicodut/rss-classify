@@ -10,6 +10,7 @@ const envSchema = z.object({
   RSS_FETCH_CONCURRENCY: z.coerce.number().int().default(3),
   REFRESH_INTERVAL_MS: z.coerce.number().int().default(3_600_000),
   CORS_ORIGIN: z.string().default("http://localhost:5173"),
+  EMBEDDING_MODEL: z.string().default("Xenova/bge-small-en-v1.5"),
 });
 
 export type AppConfig = z.infer<typeof envSchema>;

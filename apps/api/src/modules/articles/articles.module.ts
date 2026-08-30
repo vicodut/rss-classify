@@ -42,6 +42,11 @@ export async function registerArticlesModule(app: FastifyInstance) {
           }),
         ),
       ),
+    updateTags: async ({ params, body, request }) => {
+      const article = await service.updateTags(request.db, params.id, body);
+      if (!article) return { status: 404, body: { error: { message: "Article not found" } } };
+      return { status: 200, body: article };
+    },
     removeRating: async ({ params, request }) => {
       const article = await service.removeRating(request.db, params.id);
       if (!article) return { status: 404, body: { error: { message: "Article not found" } } };

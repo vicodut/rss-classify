@@ -37,6 +37,11 @@ export class ProfileService {
       .update({
         tag_weights: mergeClamped(existing.tag_weights, body.tagWeights),
         keyword_weights: mergeClamped(existing.keyword_weights, body.keywordWeights),
+        ...(body.tagKnnK !== undefined ? { tag_knn_k: body.tagKnnK } : {}),
+        ...(body.tagKnnMinVotes !== undefined ? { tag_knn_min_votes: body.tagKnnMinVotes } : {}),
+        ...(body.tagKnnSimilarityFloor !== undefined
+          ? { tag_knn_similarity_floor: body.tagKnnSimilarityFloor }
+          : {}),
       })
       .eq("id", existing.id)
       .select("*")
@@ -55,6 +60,9 @@ export class ProfileService {
         keyword_weights: {},
         total_articles_rated: 0,
         average_rating: 0,
+        tag_knn_k: 10,
+        tag_knn_min_votes: 2,
+        tag_knn_similarity_floor: 0.18,
       })
       .eq("id", existing.id)
       .select("*")

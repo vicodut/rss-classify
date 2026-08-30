@@ -1,5 +1,6 @@
 import { injectable } from "tsyringe";
 import { DEFAULT_TAGS } from "@rss-agg/contract";
+import type { MatchRatedArticlesRow } from "@rss-agg/db";
 import { average, clamp } from "../../common/utils/math.js";
 
 export const DEFAULT_TAG_WEIGHTS: Record<string, number> = Object.fromEntries(
@@ -29,17 +30,50 @@ export interface ScoredArticle {
 
 @injectable()
 export class ScoringService {
-  scoreArticle(article: ScorableArticle, weights: PreferenceWeights): ScoredArticle {
+  /**
+   * `ratedNeighbors` (from ClassificationService.findRatedNeighbors — kept
+   * out of this class so it stays DB-free) drives the second term when
+   * present: a similarity-weighted average of how the user rated their
+   * nearest-content neighbors (Tier 2, see specs/ML_CLASSIFICATION_SPEC.md).
+   * Falls back to the keyword-weight heuristic when there's no rating
+   * history yet to regress from (Tier 1, unchanged prior behavior).
+   */
+  scoreArticle(
+    article: ScorableArticle,
+    weights: PreferenceWeights,
+    ratedNeighbors: MatchRatedArticlesRow[] = [],
+  ): ScoredArticle {
     const tagScore = average(article.tags.map((tag) => weights.tagWeights[tag] ?? 0.5));
+    const knnScore = this.knnScore(ratedNeighbors);
+    const secondTerm = knnScore ?? this.keywordScore(article, weights);
 
+    const score = clamp(tagScore * 0.6 + secondTerm * 0.4, 0, 5);
+    const reason =
+      knnScore !== null
+        ? this.explainKnnScore(article.tags, ratedNeighbors, knnScore)
+        : this.explainScore(article.tags, weights);
+    return { score, reason };
+  }
+
+  private knnScore(neighbors: MatchRatedArticlesRow[]): number | null {
+    if (neighbors.length === 0) return null;
+    const totalWeight = neighbors.reduce((sum, n) => sum + Math.max(n.similarity, 0), 0);
+    if (totalWeight <= 0) return average(neighbors.map((n) => n.user_rating));
+    return neighbors.reduce((sum, n) => sum + n.user_rating * Math.max(n.similarity, 0), 0) / totalWeight;
+  }
+
+  private keywordScore(article: ScorableArticle, weights: PreferenceWeights): number {
     const text = `${article.title} ${article.content ?? ""}`.toLowerCase();
     const matchedKeywords = Object.keys(weights.keywordWeights).filter((keyword) =>
       text.includes(keyword.toLowerCase()),
     );
-    const keywordScore = average(matchedKeywords.map((keyword) => weights.keywordWeights[keyword] ?? 0.5));
+    return average(matchedKeywords.map((keyword) => weights.keywordWeights[keyword] ?? 0.5));
+  }
 
-    const score = clamp(tagScore * 0.6 + keywordScore * 0.4, 0, 5);
-    return { score, reason: this.explainScore(article.tags, weights) };
+  private explainKnnScore(tags: string[], neighbors: MatchRatedArticlesRow[], knnScore: number): string {
+    const tagPart = tags.length > 0 ? `Tagged ${tags.join(", ")}. ` : "";
+    const plural = neighbors.length === 1 ? "article" : "articles";
+    return `${tagPart}Similar to ${neighbors.length} ${plural} you rated, averaging ${knnScore.toFixed(1)}/5.`;
   }
 
   /**

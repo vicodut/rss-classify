@@ -28,6 +28,7 @@ export const articleSchema = z.object({
   isSaved: z.boolean(),
   isDismissed: z.boolean(),
   reason: z.string().nullable(),
+  tagsConfirmed: z.boolean(),
 });
 export type Article = z.infer<typeof articleSchema>;
 
@@ -51,6 +52,11 @@ export const rateArticleBodySchema = z.object({
   tags: z.array(z.string()).optional(),
 });
 export type RateArticleBody = z.infer<typeof rateArticleBodySchema>;
+
+export const updateArticleTagsBodySchema = z.object({
+  tags: z.array(z.string()),
+});
+export type UpdateArticleTagsBody = z.infer<typeof updateArticleTagsBodySchema>;
 
 export const feedSchema = z.object({
   id: z.string().uuid(),
@@ -88,12 +94,18 @@ export const userProfileSchema = z.object({
   totalArticlesRated: z.number().int(),
   averageRating: z.number(),
   updatedAt: z.string().datetime(),
+  tagKnnK: z.number().int().min(1).max(50),
+  tagKnnMinVotes: z.number().int().min(1),
+  tagKnnSimilarityFloor: z.number().min(0).max(1),
 });
 export type UserProfile = z.infer<typeof userProfileSchema>;
 
 export const updateProfileBodySchema = z.object({
   tagWeights: z.record(z.string(), z.number().min(0).max(1)).optional(),
   keywordWeights: z.record(z.string(), z.number().min(0).max(1)).optional(),
+  tagKnnK: z.number().int().min(1).max(50).optional(),
+  tagKnnMinVotes: z.number().int().min(1).optional(),
+  tagKnnSimilarityFloor: z.number().min(0).max(1).optional(),
 });
 export type UpdateProfileBody = z.infer<typeof updateProfileBodySchema>;
 

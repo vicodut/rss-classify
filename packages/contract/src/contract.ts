@@ -8,6 +8,7 @@ import {
   listArticlesQuerySchema,
   paginatedSchema,
   rateArticleBodySchema,
+  updateArticleTagsBodySchema,
   refreshFeedsBodySchema,
   refreshFeedsResultSchema,
   searchArticlesQuerySchema,
@@ -72,6 +73,17 @@ const articlesContract = c.router(
         404: errorResponseSchema,
       },
       summary: "Rate an article (1-5) and optionally correct its tags",
+    },
+    updateTags: {
+      method: "PATCH",
+      path: "/articles/:id/tags",
+      body: updateArticleTagsBodySchema,
+      responses: {
+        200: articleSchema,
+        401: errorResponseSchema,
+        404: errorResponseSchema,
+      },
+      summary: "Manually correct an article's tags, independent of rating (full replacement)",
     },
     removeRating: {
       method: "DELETE",

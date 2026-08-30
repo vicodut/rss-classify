@@ -5,7 +5,8 @@ import type { CreateFeedBody, Feed } from "@rss-agg/contract";
 import type { AppConfig } from "../../core/config.js";
 import { APP_CONFIG } from "../../core/types.js";
 import { ScoringService, type PreferenceWeights } from "../scoring/scoring.service.js";
-import { TaggingService } from "../scoring/tagging.service.js";
+import { ClassificationService, type TagKnnSettings } from "../scoring/classification.service.js";
+import { EmbeddingsService, prepareTextForEmbedding } from "../embeddings/embeddings.service.js";
 import { fetchFeed } from "./feeds.parser.js";
 
 const UNIQUE_VIOLATION = "23505";
@@ -28,8 +29,9 @@ export interface RefreshFeedsResult {
 export class FeedsService {
   constructor(
     @inject(APP_CONFIG) private readonly config: AppConfig,
-    @inject(TaggingService) private readonly tagging: TaggingService,
     @inject(ScoringService) private readonly scoring: ScoringService,
+    @inject(ClassificationService) private readonly classification: ClassificationService,
+    @inject(EmbeddingsService) private readonly embeddings: EmbeddingsService,
   ) {}
 
   async list(db: TypedSupabaseClient): Promise<Feed[]> {
@@ -78,6 +80,7 @@ export class FeedsService {
     db: TypedSupabaseClient,
     feed: FeedRow,
     weights: PreferenceWeights,
+    tagKnn: TagKnnSettings,
   ): Effect.Effect<FeedRefreshOutcome, never> {
     return fetchFeed(feed.url, this.config.RSS_FETCH_TIMEOUT_MS).pipe(
       Effect.matchEffect({
@@ -90,25 +93,46 @@ export class FeedsService {
           }),
         onSuccess: (parsed) =>
           Effect.gen(this, function* () {
-            const rows = parsed.items.map((item) => {
-              const tags = this.tagging.tagArticle(item.title, item.content);
-              const { score, reason } = this.scoring.scoreArticle(
-                { tags, title: item.title, content: item.content },
-                weights,
-              );
-              return {
-                user_id: feed.user_id,
-                source_id: feed.id,
-                url: item.url,
-                title: item.title,
-                content: item.content,
-                source: feed.title ?? parsed.title ?? null,
-                tags,
-                predicted_score: score,
-                reason,
-                published_at: item.publishedAt,
-              };
-            });
+            // One batched model call for every new item in this feed, not
+            // one call per item.
+            const embeddings = yield* Effect.tryPromise(() =>
+              this.embeddings.embed(parsed.items.map((item) => prepareTextForEmbedding(item.title, item.content))),
+            ).pipe(Effect.orDie);
+
+            const rows = yield* Effect.forEach(
+              parsed.items,
+              (item, index) =>
+                Effect.gen(this, function* () {
+                  const embedding = embeddings[index]!;
+                  const tags = yield* Effect.tryPromise(() =>
+                    this.classification.classifyTags(db, feed.user_id, embedding, tagKnn, item.title, item.content),
+                  ).pipe(Effect.orDie);
+                  const ratedNeighbors = yield* Effect.tryPromise(() =>
+                    this.classification.findRatedNeighbors(db, feed.user_id, embedding, tagKnn.k),
+                  ).pipe(Effect.orDie);
+                  const { score, reason } = this.scoring.scoreArticle(
+                    { tags, title: item.title, content: item.content },
+                    weights,
+                    ratedNeighbors,
+                  );
+                  return {
+                    user_id: feed.user_id,
+                    source_id: feed.id,
+                    url: item.url,
+                    title: item.title,
+                    content: item.content,
+                    source: feed.title ?? parsed.title ?? null,
+                    tags,
+                    predicted_score: score,
+                    reason,
+                    published_at: item.publishedAt,
+                    embedding,
+                    embedding_model: this.config.EMBEDDING_MODEL,
+                    tags_confirmed: false,
+                  };
+                }),
+              { concurrency: this.config.RSS_FETCH_CONCURRENCY },
+            );
 
             const created = yield* Effect.tryPromise(async () => {
               if (rows.length === 0) return 0;
@@ -165,10 +189,17 @@ export class FeedsService {
       const weights: PreferenceWeights = profileRow
         ? { tagWeights: profileRow.tag_weights, keywordWeights: profileRow.keyword_weights }
         : { tagWeights: {}, keywordWeights: {} };
+      const tagKnn: TagKnnSettings = profileRow
+        ? {
+            k: profileRow.tag_knn_k,
+            minVotes: profileRow.tag_knn_min_votes,
+            similarityFloor: profileRow.tag_knn_similarity_floor,
+          }
+        : { k: 10, minVotes: 2, similarityFloor: 0.18 };
 
       const outcomes = yield* Effect.forEach(
         feedRows,
-        (feed) => this.refreshOneFeed(db, feed, weights),
+        (feed) => this.refreshOneFeed(db, feed, weights, tagKnn),
         { concurrency: this.config.RSS_FETCH_CONCURRENCY },
       );
 

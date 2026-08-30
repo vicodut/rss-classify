@@ -1,9 +1,16 @@
 import { inject, injectable } from "tsyringe";
 import { Effect } from "effect";
-import { articleFromRow, type ArticleRow, type TypedSupabaseClient } from "@rss-agg/db";
-import type { Article, ListArticlesQuery, RateArticleBody } from "@rss-agg/contract";
+import {
+  articleFromRow,
+  parseEmbedding,
+  type ArticleRow,
+  type MatchRatedArticlesRow,
+  type TypedSupabaseClient,
+} from "@rss-agg/db";
+import type { Article, ListArticlesQuery, RateArticleBody, UpdateArticleTagsBody } from "@rss-agg/contract";
 import { unwrap } from "../../common/utils/supabase.js";
 import { ScoringService } from "../scoring/scoring.service.js";
+import { ClassificationService } from "../scoring/classification.service.js";
 import { ArticleNotFoundError, ProfileNotFoundError } from "./articles.errors.js";
 
 export interface Page<T> {
@@ -34,7 +41,10 @@ function decodeCursor(cursor: string): Cursor {
  */
 @injectable()
 export class ArticlesService {
-  constructor(@inject(ScoringService) private readonly scoring: ScoringService) {}
+  constructor(
+    @inject(ScoringService) private readonly scoring: ScoringService,
+    @inject(ClassificationService) private readonly classification: ClassificationService,
+  ) {}
 
   async list(db: TypedSupabaseClient, query: ListArticlesQuery): Promise<Page<Article>> {
     let builder = db
@@ -141,6 +151,55 @@ export class ArticlesService {
   }
 
   /**
+   * Manual tag correction, decoupled from rating — a labeling event, not a
+   * preference signal. Full-replacement semantics; sets tags_confirmed=true
+   * (this article becomes eligible as a k-NN neighbor for future
+   * classification/scoring) and recomputes only this article's score. Does
+   * NOT call learnFromRating and does NOT trigger the unrated-articles
+   * re-rank that rate() does.
+   */
+  async updateTags(
+    db: TypedSupabaseClient,
+    id: string,
+    body: UpdateArticleTagsBody,
+  ): Promise<Article | null> {
+    const { data: articleRow, error: articleError } = await db
+      .from("articles")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+    if (articleError) throw articleError;
+    if (!articleRow) return null;
+
+    const { data: profileRow, error: profileError } = await db
+      .from("user_profiles")
+      .select("*")
+      .maybeSingle();
+    if (profileError) throw profileError;
+    if (!profileRow) return null;
+
+    const weights = { tagWeights: profileRow.tag_weights, keywordWeights: profileRow.keyword_weights };
+    const embedding = parseEmbedding(articleRow.embedding);
+    const ratedNeighbors = embedding
+      ? await this.classification.findRatedNeighbors(db, profileRow.id, embedding, profileRow.tag_knn_k)
+      : [];
+    const { score, reason } = this.scoring.scoreArticle(
+      { tags: body.tags, title: articleRow.title, content: articleRow.content },
+      weights,
+      ratedNeighbors,
+    );
+
+    const { data, error } = await db
+      .from("articles")
+      .update({ tags: body.tags, tags_confirmed: true, predicted_score: score, reason })
+      .eq("id", id)
+      .select("*")
+      .maybeSingle();
+    if (error) throw error;
+    return data ? articleFromRow(data) : null;
+  }
+
+  /**
    * Rate an article, run the Phase 2 learning update on the user's tag
    * weights, and recalculate predicted_score for the user's unrated
    * articles. Uses Effect for the typed not-found errors and the concurrent
@@ -169,9 +228,16 @@ export class ArticlesService {
       const tags = body.tags ?? articleRow.tags;
       const newTagWeights = this.scoring.learnFromRating(profileRow.tag_weights, tags, body.rating);
       const weights = { tagWeights: newTagWeights, keywordWeights: profileRow.keyword_weights };
+      const ownEmbedding = parseEmbedding(articleRow.embedding);
+      const ownNeighbors = yield* ownEmbedding
+        ? Effect.tryPromise(() =>
+            this.classification.findRatedNeighbors(db, profileRow.id, ownEmbedding, profileRow.tag_knn_k),
+          ).pipe(Effect.orDie)
+        : Effect.succeed<MatchRatedArticlesRow[]>([]);
       const { score: newScore, reason: newReason } = this.scoring.scoreArticle(
         { tags, title: articleRow.title, content: articleRow.content },
         weights,
+        ownNeighbors,
       );
 
       const newTotal = profileRow.total_articles_rated + 1;
@@ -193,7 +259,15 @@ export class ArticlesService {
       const updatedRow = yield* Effect.tryPromise(async () => {
         const { data, error } = await db
           .from("articles")
-          .update({ tags, user_rating: body.rating, predicted_score: newScore, reason: newReason })
+          .update({
+            tags,
+            user_rating: body.rating,
+            predicted_score: newScore,
+            reason: newReason,
+            // Only a human touching tags is eligible k-NN training data —
+            // the keyword heuristic/k-NN classifier never sets this itself.
+            ...(body.tags ? { tags_confirmed: true } : {}),
+          })
           .eq("id", id)
           .select("*")
           .single();
@@ -215,9 +289,14 @@ export class ArticlesService {
         unrated,
         (row) =>
           Effect.tryPromise(async () => {
+            const rowEmbedding = parseEmbedding(row.embedding);
+            const neighbors = rowEmbedding
+              ? await this.classification.findRatedNeighbors(db, profileRow.id, rowEmbedding, profileRow.tag_knn_k)
+              : [];
             const { score, reason } = this.scoring.scoreArticle(
               { tags: row.tags, title: row.title, content: row.content },
               weights,
+              neighbors,
             );
             const { error } = await db
               .from("articles")

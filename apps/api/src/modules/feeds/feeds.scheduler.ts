@@ -5,6 +5,7 @@ import type { FastifyBaseLogger } from "fastify";
 import { createServiceRoleClient } from "@rss-agg/db";
 import type { AppConfig } from "../../core/config.js";
 import type { PreferenceWeights } from "../scoring/scoring.service.js";
+import type { TagKnnSettings } from "../scoring/classification.service.js";
 import { FeedsService } from "./feeds.service.js";
 
 /**
@@ -30,12 +31,25 @@ export async function refreshAllUsersFeeds(config: AppConfig, feedsService: Feed
   const weightsByUser = new Map<string, PreferenceWeights>(
     (profiles ?? []).map((p) => [p.id, { tagWeights: p.tag_weights, keywordWeights: p.keyword_weights }]),
   );
+  const tagKnnByUser = new Map<string, TagKnnSettings>(
+    (profiles ?? []).map((p) => [
+      p.id,
+      { k: p.tag_knn_k, minVotes: p.tag_knn_min_votes, similarityFloor: p.tag_knn_similarity_floor },
+    ]),
+  );
   const fallbackWeights: PreferenceWeights = { tagWeights: {}, keywordWeights: {} };
+  const fallbackTagKnn: TagKnnSettings = { k: 10, minVotes: 2, similarityFloor: 0.18 };
 
   await Effect.runPromise(
     Effect.forEach(
       feeds,
-      (feed) => feedsService.refreshOneFeed(db, feed, weightsByUser.get(feed.user_id) ?? fallbackWeights),
+      (feed) =>
+        feedsService.refreshOneFeed(
+          db,
+          feed,
+          weightsByUser.get(feed.user_id) ?? fallbackWeights,
+          tagKnnByUser.get(feed.user_id) ?? fallbackTagKnn,
+        ),
       { concurrency: config.RSS_FETCH_CONCURRENCY },
     ),
   );
