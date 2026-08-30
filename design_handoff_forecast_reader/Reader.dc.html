@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/industry-bcd7d09d-9075-4e8a-817d-4e7056612096/styles.css">
+<script src="_ds/industry-bcd7d09d-9075-4e8a-817d-4e7056612096/_ds_bundle.js"></script>
+<style>
+  html, body { height: 100%; overflow: hidden; }
+  .scroll { scrollbar-width: thin; scrollbar-color: var(--color-neutral-400) transparent; }
+  a { color: var(--color-accent-700); }
+  a:hover { color: var(--color-accent-900); }
+</style>
+</helmet>
+
+<div style="height: 100vh; display: grid; grid-template-rows: auto 1fr; background: var(--color-bg); color: var(--color-text); font-family: var(--font-body);">
+
+  <header style="display: grid; grid-template-columns: minmax(180px, 240px) minmax(0, 1fr) auto; align-items: center; gap: 24px; padding: 0 22px; height: 58px; border-bottom: 1px solid var(--color-divider);">
+    <div style="display: flex; align-items: baseline; gap: 8px;">
+      <span style="font-family: var(--font-heading); font-weight: 600; font-size: 19px; letter-spacing: 0.1em; text-transform: uppercase;">Forecast</span>
+      <span style="font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: color-mix(in srgb, var(--color-text) 42%, transparent);">reader</span>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 14px;">
+      <div style="display: flex; border: 1px solid var(--color-divider);">
+        <sc-for list="{{ views }}" as="v" hint-placeholder-count="4">
+          <button type="button" onClick="{{ v.onPick }}" style="font-family: var(--font-heading); font-weight: 600; font-size: 12px; letter-spacing: 0.09em; text-transform: uppercase; padding: 8px 15px; cursor: pointer; border: 0; border-left: 1px solid var(--color-divider); background: {{ v.bg }}; color: {{ v.fg }};" style-hover="opacity: 0.78">{{ v.label }}</button>
+        </sc-for>
+      </div>
+      <span style="font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: color-mix(in srgb, var(--color-text) 45%, transparent);">{{ countLabel }}</span>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <button type="button" onClick="{{ onToggleMobile }}" style="font-family: var(--font-heading); font-weight: 600; font-size: 11px; letter-spacing: 0.09em; text-transform: uppercase; padding: 7px 12px; cursor: pointer; border: 1px solid var(--color-divider); background: transparent; color: color-mix(in srgb, var(--color-text) 70%, transparent);" style-hover="border-color: var(--color-accent); color: var(--color-accent-700)">Phone</button>
+      <button type="button" class="btn btn-primary" onClick="{{ onAdd }}" style="font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase;">Add link</button>
+    </div>
+  </header>
+
+  <div style="display: grid; grid-template-columns: minmax(0, 210px) minmax(0, 1fr); min-height: 0;">
+
+    <nav class="scroll" style="border-right: 1px solid var(--color-divider); padding: 20px 0 40px; overflow-y: auto;">
+      <div style="display: flex; align-items: baseline; justify-content: space-between; padding: 0 22px 10px;">
+        <span style="font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: color-mix(in srgb, var(--color-text) 42%, transparent);">Classification</span>
+        <span style="font-size: 10px; letter-spacing: 0.06em; color: color-mix(in srgb, var(--color-text) 32%, transparent);">fluid</span>
+      </div>
+      <sc-for list="{{ topics }}" as="t" hint-placeholder-count="8">
+        <button type="button" onClick="{{ t.onPick }}" style="width: 100%; display: grid; grid-template-columns: 3px 1fr auto; align-items: center; gap: 11px; padding: 6px 22px 6px 0; border: 0; cursor: pointer; text-align: left; font: inherit; font-size: 14px; background: {{ t.bg }}; color: {{ t.fg }};" style-hover="background: color-mix(in srgb, var(--color-text) 5%, transparent)">
+          <span style="height: 14px; background: {{ t.bar }};"></span>
+          <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ t.name }}</span>
+          <span style="font-size: 11px; font-variant-numeric: tabular-nums; color: color-mix(in srgb, var(--color-text) 42%, transparent);">{{ t.count }}</span>
+        </button>
+      </sc-for>
+
+      <div style="padding: 26px 22px 10px; font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: color-mix(in srgb, var(--color-text) 42%, transparent);">Forecast key</div>
+      <div style="display: grid; gap: 10px; padding: 0 22px;">
+        <div style="display: grid; grid-template-columns: 22px 1fr; align-items: center; gap: 10px; font-size: 12px; color: color-mix(in srgb, var(--color-text) 62%, transparent);">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent-700)" stroke-width="1.5" stroke-linecap="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4"></path></svg>
+          <span>Likely — clear</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 22px 1fr; align-items: center; gap: 10px; font-size: 12px; color: color-mix(in srgb, var(--color-text) 62%, transparent);">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-neutral-600)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6.5a3.5 3.5 0 0 1 6.2 1.6"></path><path d="M7 19h10a3.5 3.5 0 0 0 .3-7 5 5 0 0 0-9.6 1.2A3 3 0 0 0 7 19Z"></path></svg>
+          <span>Maybe — overcast</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 22px 1fr; align-items: center; gap: 10px; font-size: 12px; color: color-mix(in srgb, var(--color-text) 62%, transparent);">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-neutral-500)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15h11a3.5 3.5 0 0 0 .3-7 5 5 0 0 0-9.6 1.2A3 3 0 0 0 6 15Z"></path><path d="M9 18.5 8 21M13 18.5 12 21M17 18.5 16 21"></path></svg>
+          <span>Probably not — rain</span>
+        </div>
+      </div>
+
+      <div style="margin: 26px 22px 0; padding-top: 16px; border-top: 1px solid var(--color-divider); font-size: 11px; line-height: 1.85; color: color-mix(in srgb, var(--color-text) 45%, transparent);">
+        <div>J / K &nbsp;&nbsp;move</div>
+        <div>1 – 5 &nbsp;&nbsp;rate</div>
+        <div>S &nbsp;&nbsp;save &nbsp;·&nbsp; X &nbsp;&nbsp;dismiss</div>
+        <div>Enter &nbsp;&nbsp;open</div>
+      </div>
+    </nav>
+
+    <main class="scroll" style="overflow-y: auto; min-width: 0;">
+
+      <sc-if value="{{ isSearch }}" hint-placeholder-val="{{ false }}">
+        <div style="padding: 22px 22px 18px; border-bottom: 1px solid var(--color-divider); display: grid; gap: 16px;">
+          <input class="input" type="text" placeholder="Search titles, sources, notes" value="{{ query }}" onChange="{{ onQuery }}" style="background: transparent; font-size: 17px; min-height: 44px; font-family: var(--font-heading);">
+          <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 22px;">
+            <div style="display: grid; gap: 6px;">
+              <span style="font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: color-mix(in srgb, var(--color-text) 42%, transparent);">Forecast</span>
+              <div style="display: flex; border: 1px solid var(--color-divider);">
+                <sc-for list="{{ levelFilters }}" as="f" hint-placeholder-count="4">
+                  <button type="button" onClick="{{ f.onPick }}" style="font-size: 12px; padding: 6px 12px; cursor: pointer; border: 0; border-left: 1px solid var(--color-divider); background: {{ f.bg }}; color: {{ f.fg }};" style-hover="opacity: 0.78">{{ f.label }}</button>
+                </sc-for>
+              </div>
+            </div>
+            <div style="display: grid; gap: 6px;">
+              <span style="font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: color-mix(in srgb, var(--color-text) 42%, transparent);">Minimum rating</span>
+              <div style="display: flex; border: 1px solid var(--color-divider);">
+                <sc-for list="{{ ratingFilters }}" as="f" hint-placeholder-count="6">
+                  <button type="button" onClick="{{ f.onPick }}" style="font-size: 12px; padding: 6px 11px; cursor: pointer; border: 0; border-left: 1px solid var(--color-divider); background: {{ f.bg }}; color: {{ f.fg }}; font-variant-numeric: tabular-nums;" style-hover="opacity: 0.78">{{ f.label }}</button>
+                </sc-for>
+              </div>
+            </div>
+            <div style="display: grid; gap: 6px;">
+              <span style="font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: color-mix(in srgb, var(--color-text) 42%, transparent);">Sort</span>
+              <div style="display: flex; border: 1px solid var(--color-divider);">
+                <sc-for list="{{ sorts }}" as="f" hint-placeholder-count="3">
+                  <button type="button" onClick="{{ f.onPick }}" style="font-size: 12px; padding: 6px 12px; cursor: pointer; border: 0; border-left: 1px solid var(--color-divider); background: {{ f.bg }}; color: {{ f.fg }};" style-hover="opacity: 0.78">{{ f.label }}</button>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isList }}" hint-placeholder-val="{{ true }}">
+        <div style="position: sticky; top: 0; z-index: 5; display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; align-items: center; gap: 16px; padding: 14px 20px; background: var(--color-bg); border-bottom: 1px solid var(--color-divider);">
+          <div style="display: grid; justify-items: center;">
+            <sc-if value="{{ sel.isClear }}" hint-placeholder-val="{{ true }}">
+              <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent-700)" stroke-width="1.5" stroke-linecap="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4"></path></svg>
+            </sc-if>
+            <sc-if value="{{ sel.isMaybe }}" hint-placeholder-val="{{ false }}">
+              <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="var(--color-neutral-600)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6.5a3.5 3.5 0 0 1 6.2 1.6"></path><path d="M7 19h10a3.5 3.5 0 0 0 .3-7 5 5 0 0 0-9.6 1.2A3 3 0 0 0 7 19Z"></path></svg>
+            </sc-if>
+            <sc-if value="{{ sel.isRain }}" hint-placeholder-val="{{ false }}">
+              <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="var(--color-neutral-500)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15h11a3.5 3.5 0 0 0 .3-7 5 5 0 0 0-9.6 1.2A3 3 0 0 0 6 15Z"></path><path d="M9 18.5 8 21M13 18.5 12 21M17 18.5 16 21"></path></svg>
+            </sc-if>
+          </div>
+          <div style="min-width: 0;">
+            <div style="font-family: var(--font-heading); font-weight: 600; font-size: 14px; letter-spacing: 0.1em; text-transform: uppercase; color: {{ sel.levelColor }};">{{ sel.levelLabel }} · {{ sel.score }}/100 — {{ sel.source }}</div>
+            <div style="font-size: 12px; line-height: 1.45; color: color-mix(in srgb, var(--color-text) 58%, transparent);">{{ sel.reason }}</div>
+          </div>
+          <a class="btn btn-primary" href="{{ sel.url }}" target="_blank" rel="noreferrer" style="font-size: 12px; letter-spacing: 0.09em; text-transform: uppercase; white-space: nowrap;">Open original</a>
+        </div>
+        <div>
+          <sc-for list="{{ rows }}" as="a" hint-placeholder-count="10">
+            <div onClick="{{ a.onOpen }}" style="display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; align-items: center; gap: 14px; height: 52px; padding-right: 20px; border-bottom: 1px solid color-mix(in srgb, var(--color-text) 8%, transparent); cursor: pointer; background: {{ a.bg }}; opacity: {{ a.opacity }}; border-left: 3px solid {{ a.edge }};" style-hover="background: color-mix(in srgb, var(--color-text) 4%, transparent)">
+
+              <div style="display: grid; justify-items: center; gap: 1px;">
+                <sc-if value="{{ a.isClear }}" hint-placeholder-val="{{ true }}">
+                  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent-700)" stroke-width="1.5" stroke-linecap="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4"></path></svg>
+                </sc-if>
+                <sc-if value="{{ a.isMaybe }}" hint-placeholder-val="{{ false }}">
+                  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--color-neutral-600)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6.5a3.5 3.5 0 0 1 6.2 1.6"></path><path d="M7 19h10a3.5 3.5 0 0 0 .3-7 5 5 0 0 0-9.6 1.2A3 3 0 0 0 7 19Z"></path></svg>
+                </sc-if>
+                <sc-if value="{{ a.isRain }}" hint-placeholder-val="{{ false }}">
+                  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--color-neutral-500)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15h11a3.5 3.5 0 0 0 .3-7 5 5 0 0 0-9.6 1.2A3 3 0 0 0 6 15Z"></path><path d="M9 18.5 8 21M13 18.5 12 21M17 18.5 16 21"></path></svg>
+                </sc-if>
+                <span style="font-size: 9px; font-variant-numeric: tabular-nums; letter-spacing: 0.06em; color: {{ a.scoreColor }};">{{ a.score }}</span>
+              </div>
+
+              <div style="min-width: 0; overflow: hidden; display: flex; align-items: baseline; gap: 14px;">
+                <span style="flex: 0 1 auto; min-width: 0; font-family: var(--font-heading); font-weight: 600; font-size: 17px; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: {{ a.titleColor }};">{{ a.title }}</span>
+                <span style="flex: 0 0 auto; margin-left: auto; display: flex; align-items: baseline; gap: 10px;">
+                  <span style="white-space: nowrap; font-size: 11px; letter-spacing: 0.07em; text-transform: uppercase; color: color-mix(in srgb, var(--color-text) 44%, transparent);">{{ a.source }} <span style="font-variant-numeric: tabular-nums; letter-spacing: 0; text-transform: none; color: color-mix(in srgb, var(--color-text) 32%, transparent);">· {{ a.when }} · {{ a.minutes }}m</span></span>
+                  <sc-for list="{{ a.topics }}" as="t" hint-placeholder-count="2">
+                    <span style="flex: 0 0 auto; font-size: 10px; letter-spacing: 0.07em; text-transform: uppercase; white-space: nowrap; padding: 2px 7px; border: 1px solid color-mix(in srgb, var(--color-accent) 40%, transparent); color: var(--color-accent-700);">{{ t.name }}</span>
+                  </sc-for>
+                </span>
+              </div>
+
+              <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="display: flex; gap: 3px;">
+                <sc-for list="{{ a.stars }}" as="s" hint-placeholder-count="5">
+                  <button type="button" title="Rate {{ s.value }}" onClick="{{ s.onRate }}" style="width: 14px; height: 24px; padding: 0; border: 0; background: transparent; cursor: pointer; display: grid; place-items: center;" style-hover="opacity: 0.55">
+                    <span style="width: 8px; height: 8px; display: block; background: {{ s.fill }}; border: 1px solid {{ s.ring }};"></span>
+                  </button>
+                </sc-for>
+              </div>
+
+              <div style="display: flex; gap: 5px;">
+                <button type="button" onClick="{{ a.onSave }}" title="Save for later" style="width: 27px; height: 27px; padding: 0; display: grid; place-items: center; border: 1px solid {{ a.saveBorder }}; background: {{ a.saveBg }}; color: {{ a.saveFg }}; cursor: pointer;" style-hover="border-color: var(--color-accent)">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h12v17l-6-4.5L6 21z"></path></svg>
+                </button>
+                <button type="button" onClick="{{ a.onDismiss }}" title="Dismiss" style="width: 27px; height: 27px; padding: 0; display: grid; place-items: center; border: 1px solid var(--color-divider); background: transparent; color: color-mix(in srgb, var(--color-text) 40%, transparent); cursor: pointer;" style-hover="border-color: var(--color-neutral-600); color: var(--color-text)">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+                </button>
+              </div>
+              </div>
+            </div>
+          </sc-for>
+
+          <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ false }}">
+            <div style="padding: 70px 22px; text-align: center; font-size: 13px; color: color-mix(in srgb, var(--color-text) 42%, transparent);">Nothing matches this view.</div>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isStats }}" hint-placeholder-val="{{ false }}">
+        <div style="padding: 28px 26px 50px; display: grid; gap: 30px;">
+          <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 22px;">
+            <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="4">
+              <div class="blueprint" style="padding: 16px 18px 14px;">
+                <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+                <div style="font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: color-mix(in srgb, var(--color-text) 45%, transparent);">{{ k.label }}</div>
+                <div style="font-family: var(--font-heading); font-weight: 600; font-size: 40px; line-height: 1.05; font-variant-numeric: tabular-nums; margin-top: 6px;">{{ k.value }}</div>
+                <div style="font-size: 11px; color: var(--color-accent-700);">{{ k.note }}</div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px;">
+            <div>
+              <h4 style="font-size: 15px; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 16px;">Rating distribution</h4>
+              <div style="display: grid; gap: 9px;">
+                <sc-for list="{{ dist }}" as="d" hint-placeholder-count="5">
+                  <div style="display: grid; grid-template-columns: 60px 1fr 34px; align-items: center; gap: 12px;">
+                    <div style="display: flex; gap: 3px;">
+                      <sc-for list="{{ d.pips }}" as="p" hint-placeholder-count="3">
+                        <span style="width: 8px; height: 8px; display: block; background: {{ p.fill }}; border: 1px solid {{ p.ring }};"></span>
+                      </sc-for>
+                    </div>
+                    <div style="height: 14px; border: 1px solid var(--color-divider);">
+                      <div style="height: 100%; width: {{ d.pct }}; background: var(--color-accent);"></div>
+                    </div>
+                    <span style="font-size: 12px; font-variant-numeric: tabular-nums; text-align: right; color: color-mix(in srgb, var(--color-text) 60%, transparent);">{{ d.count }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+
+            <div>
+              <h4 style="font-size: 15px; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 16px;">Reading volume · 12 weeks</h4>
+              <div style="display: flex; align-items: flex-end; gap: 6px; height: 132px; border-bottom: 1px solid var(--color-divider);">
+                <sc-for list="{{ weeks }}" as="w" hint-placeholder-count="12">
+                  <div style="flex: 1; display: flex; flex-direction: column; justify-content: flex-end; gap: 2px; height: 100%;">
+                    <div style="height: {{ w.readPct }}; background: var(--color-accent);"></div>
+                    <div style="height: {{ w.skipPct }}; background: color-mix(in srgb, var(--color-text) 14%, transparent);"></div>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="display: flex; gap: 18px; margin-top: 10px; font-size: 11px; color: color-mix(in srgb, var(--color-text) 50%, transparent);">
+                <span style="display: flex; align-items: center; gap: 6px;"><span style="width: 9px; height: 9px; background: var(--color-accent); display: block;"></span>read</span>
+                <span style="display: flex; align-items: center; gap: 6px;"><span style="width: 9px; height: 9px; background: color-mix(in srgb, var(--color-text) 14%, transparent); display: block;"></span>dismissed</span>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <h4 style="font-size: 15px; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 12px;">Forecast accuracy by classification</h4>
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Classification</th>
+                  <th style="text-align: right;">Saved</th>
+                  <th style="text-align: right;">Read</th>
+                  <th style="text-align: right;">Avg rating</th>
+                  <th style="text-align: right;">Forecast hit</th>
+                  <th style="width: 150px;">Trend</th>
+                </tr>
+              </thead>
+              <tbody>
+                <sc-for list="{{ topicStats }}" as="t" hint-placeholder-count="7">
+                  <tr>
+                    <td style="font-family: var(--font-heading); font-weight: 600; font-size: 15px;">{{ t.name }}</td>
+                    <td style="text-align: right; font-variant-numeric: tabular-nums;">{{ t.saved }}</td>
+                    <td style="text-align: right; font-variant-numeric: tabular-nums;">{{ t.read }}</td>
+                    <td style="text-align: right; font-variant-numeric: tabular-nums;">{{ t.avg }}</td>
+                    <td style="text-align: right; font-variant-numeric: tabular-nums; color: {{ t.hitColor }};">{{ t.hit }}</td>
+                    <td>
+                      <div style="height: 10px; border: 1px solid var(--color-divider);">
+                        <div style="height: 100%; width: {{ t.hit }}; background: {{ t.hitColor }};"></div>
+                      </div>
+                    </td>
+                  </tr>
+                </sc-for>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </sc-if>
+    </main>
+
+  </div>
+
+  <sc-if value="{{ mobile }}" hint-placeholder-val="{{ false }}">
+    <div style="position: fixed; inset: 0; background: color-mix(in srgb, var(--color-neutral-900) 55%, transparent); display: grid; place-items: center; z-index: 40;">
+      <div style="width: 390px; height: 780px; background: var(--color-bg); display: grid; grid-template-rows: auto auto 1fr auto; box-shadow: var(--shadow-lg); position: relative;">
+        <div class="blueprint" style="position: absolute; inset: 0; pointer-events: none;">
+          <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        </div>
+
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 16px 18px 12px;">
+          <span style="font-family: var(--font-heading); font-weight: 600; font-size: 17px; letter-spacing: 0.1em; text-transform: uppercase;">Forecast</span>
+          <button type="button" onClick="{{ onToggleMobile }}" style="width: 28px; height: 28px; display: grid; place-items: center; border: 1px solid var(--color-divider); background: transparent; color: var(--color-text); cursor: pointer;" style-hover="border-color: var(--color-accent)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+          </button>
+        </div>
+
+        <div style="display: flex; gap: 0; margin: 0 18px 8px; border: 1px solid var(--color-divider);">
+          <sc-for list="{{ views }}" as="v" hint-placeholder-count="4">
+            <button type="button" onClick="{{ v.onPick }}" style="flex: 1; font-family: var(--font-heading); font-weight: 600; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; padding: 9px 0; cursor: pointer; border: 0; border-left: 1px solid var(--color-divider); background: {{ v.bg }}; color: {{ v.fg }};">{{ v.label }}</button>
+          </sc-for>
+        </div>
+
+        <div class="scroll" style="overflow-y: auto;">
+          <sc-if value="{{ isList }}" hint-placeholder-val="{{ true }}">
+          <sc-for list="{{ rows }}" as="a" hint-placeholder-count="7">
+            <div style="display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 10px; padding: 13px 18px; border-bottom: 1px solid color-mix(in srgb, var(--color-text) 8%, transparent); opacity: {{ a.opacity }}; border-left: 3px solid {{ a.edge }};">
+              <div style="display: grid; justify-items: center; gap: 1px;">
+                <sc-if value="{{ a.isClear }}" hint-placeholder-val="{{ true }}">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent-700)" stroke-width="1.5" stroke-linecap="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4"></path></svg>
+                </sc-if>
+                <sc-if value="{{ a.isMaybe }}" hint-placeholder-val="{{ false }}">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--color-neutral-600)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6.5a3.5 3.5 0 0 1 6.2 1.6"></path><path d="M7 19h10a3.5 3.5 0 0 0 .3-7 5 5 0 0 0-9.6 1.2A3 3 0 0 0 7 19Z"></path></svg>
+                </sc-if>
+                <sc-if value="{{ a.isRain }}" hint-placeholder-val="{{ false }}">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--color-neutral-500)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15h11a3.5 3.5 0 0 0 .3-7 5 5 0 0 0-9.6 1.2A3 3 0 0 0 6 15Z"></path><path d="M9 18.5 8 21M13 18.5 12 21M17 18.5 16 21"></path></svg>
+                </sc-if>
+                <span style="font-size: 9px; font-variant-numeric: tabular-nums; color: {{ a.scoreColor }};">{{ a.score }}</span>
+              </div>
+              <div style="min-width: 0; display: grid; gap: 5px;">
+                <div style="font-family: var(--font-heading); font-weight: 600; font-size: 16px; line-height: 1.2; color: {{ a.titleColor }};">{{ a.title }}</div>
+                <div style="font-size: 10px; letter-spacing: 0.07em; text-transform: uppercase; color: color-mix(in srgb, var(--color-text) 44%, transparent);">{{ a.source }} · {{ a.when }} · {{ a.minutes }}m</div>
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 2px;">
+                  <div style="display: flex; gap: 6px;">
+                    <sc-for list="{{ a.stars }}" as="s" hint-placeholder-count="5">
+                      <button type="button" onClick="{{ s.onRate }}" style="width: 32px; height: 44px; padding: 0; border: 0; background: transparent; cursor: pointer; display: grid; place-items: center;">
+                        <span style="width: 14px; height: 14px; display: block; background: {{ s.fill }}; border: 1px solid {{ s.ring }};"></span>
+                      </button>
+                    </sc-for>
+                  </div>
+                  <div style="display: flex; gap: 6px;">
+                    <button type="button" onClick="{{ a.onSave }}" style="width: 44px; height: 44px; padding: 0; display: grid; place-items: center; border: 1px solid {{ a.saveBorder }}; background: {{ a.saveBg }}; color: {{ a.saveFg }}; cursor: pointer;">
+                      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h12v17l-6-4.5L6 21z"></path></svg>
+                    </button>
+                    <button type="button" onClick="{{ a.onDismiss }}" style="width: 44px; height: 44px; padding: 0; display: grid; place-items: center; border: 1px solid var(--color-divider); background: transparent; color: color-mix(in srgb, var(--color-text) 45%, transparent); cursor: pointer;">
+                      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </sc-for>
+          </sc-if>
+          <sc-if value="{{ isStats }}" hint-placeholder-val="{{ false }}">
+            <div style="display: grid; gap: 16px; padding: 18px;">
+              <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="4">
+                <div class="blueprint" style="padding: 14px 16px;">
+                  <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+                  <div style="font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: color-mix(in srgb, var(--color-text) 45%, transparent);">{{ k.label }}</div>
+                  <div style="font-family: var(--font-heading); font-weight: 600; font-size: 36px; line-height: 1.05; font-variant-numeric: tabular-nums;">{{ k.value }}</div>
+                  <div style="font-size: 11px; color: var(--color-accent-700);">{{ k.note }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+        </div>
+        <div style="padding: 12px 18px; border-top: 1px solid var(--color-divider); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: color-mix(in srgb, var(--color-text) 45%, transparent);">{{ countLabel }}</div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 1440, &quot;height&quot;: 900}}">
+const A = (id, title, source, when, minutes, topics, score, minutesAgo, url, e1, e2, reason) =>
+  ({ id, title, source, when, minutes, topics, score, url, e1, e2, reason, order: minutesAgo });
+
+const SEED = [
+  A(1, "The long decline of the shared newsfeed", "Ribbonfarm", "2h", 14, ["Media", "Longread"], 92, 120, "#",
+    "Aggregators promised one window onto everything and delivered one window onto whatever was loudest. The interesting part is not the collapse but what got built in the rubble: private lists, five-person feeds, hand-passed bundles.",
+    "Curation is not a feature you can automate away — it is the cost of admission to a small, good information diet.",
+    "Media + Longread, both in your top-rated third; this source averages 4.2 from you."),
+  A(2, "Writing a feed parser that survives real-world XML", "Julia Evans", "4h", 9, ["Engineering", "RSS"], 88, 240, "#",
+    "Every feed in the wild is malformed in its own particular way. The parser that survives is the one that treats the spec as advice and the byte stream as the truth.",
+    "A short tour of the seven failure modes that account for most breakage, and the two-line guards for each.",
+    "RSS is your most-read classification this month; you rated the last three 5, 4, 5."),
+  A(3, "A quiet case for reading less, slower", "The Convivial Society", "6h", 11, ["Attention"], 79, 360, "#",
+    "Volume is the wrong axis. The question is not how many articles crossed your screen but how many changed how you work the following week.",
+    "The author proposes a weekly cap and a mandatory second pass, which is less austere than it sounds.",
+    "Attention pieces trend well with you, but you skipped two from this source recently."),
+  A(4, "Vector search is not a database", "Simon Willison", "9h", 12, ["Engineering", "AI"], 74, 540, "#",
+    "The embedding index is a cache with opinions. Treating it as your source of truth is how you end up unable to answer what changed and when.",
+    "Includes a small SQLite-backed pattern that keeps the durable record separate from the approximate one.",
+    "High source affinity, but AI pieces average 3.1 from you — mixed signal."),
+  A(5, "Why the archive matters more than the feed", "Ivan Illich Reader", "11h", 22, ["Longread", "Media"], 71, 660, "#",
+    "A feed is a claim about what is urgent. An archive is a claim about what lasted. Most tools ship the first and hope you'll build the second.",
+    "The strongest section argues that saving is itself an act of classification, and should be treated as data.",
+    "Matches your saved-then-rated pattern; long, so it usually waits a week."),
+  A(6, "Ten years of self-hosting, honestly assessed", "Wesley Aptekar", "14h", 17, ["Self-hosting"], 63, 840, "#",
+    "The uptime was fine. The cost was attention: an average of forty minutes a week that could not be scheduled.",
+    "A useful table of which services were worth running and which were quietly abandoned.",
+    "You save these often but finish about half."),
+  A(7, "The taxonomy problem nobody solves", "Interconnected", "1d", 8, ["Classification"], 58, 1440, "#",
+    "Fixed folders die the day your interests move. Free tags rot into a thousand near-duplicates. The middle path is tags that decay.",
+    "Proposes weighting each tag by recent use, so a classification scheme drifts with you rather than against you.",
+    "Directly relevant to your fluid-tag setup, though the source is new to you."),
+  A(8, "Notes on European rail expansion, 2026", "Pedestrian Observations", "1d", 19, ["Urbanism"], 52, 1500, "#",
+    "The night-train revival is real but smaller than the coverage suggests; the meaningful change is in regional connections.",
+    "Dense with figures, light on narrative — the kind of piece to skim then archive.",
+    "Urbanism averages 3.4 from you; you rarely finish this length."),
+  A(9, "Ten fast tricks for your terminal", "DevPost Daily", "1d", 4, ["Engineering"], 34, 1560, "#",
+    "A listicle of aliases, most of which ship with your shell already.",
+    "No new material relative to what you have already rated highly.",
+    "Listicles from this source average 1.6 from you; four dismissed in a row."),
+  A(10, "The AI productivity numbers finally arrive", "Newsletter Roundup", "2d", 6, ["AI"], 31, 2880, "#",
+    "A summary of a summary of a survey, with the underlying methodology left unlinked.",
+    "You have rated three near-identical pieces 2 or below this month.",
+    "Low: aggregator source, no primary reporting, topic already saturated for you."),
+  A(11, "How to read a spec sheet", "Holdfast Journal", "2d", 7, ["Classification", "Engineering"], 68, 2900, "#",
+    "Tolerances tell you what the manufacturer is willing to be held to. Everything else on the page is marketing.",
+    "A short, well-drawn piece with unusually good diagrams.",
+    "Adjacent to Engineering; new source with a strong first impression."),
+  A(12, "Against the infinite inbox", "Oliver Burkeman", "3d", 12, ["Attention", "Longread"], 84, 4320, "#",
+    "The inbox that can never be emptied is not a workflow problem. It is a category error about what attention is for.",
+    "Ends with a practical rule: decide at first sight, once, and let the rest go.",
+    "Your highest-rated author of the last quarter (avg 4.7)."),
+  A(13, "Feed discovery is a social problem", "Matt Webb", "3d", 10, ["RSS", "Media"], 81, 4400, "#",
+    "No algorithm found the five feeds that changed your reading. People did.",
+    "Suggests a small, explicit sharing primitive rather than a recommendation engine.",
+    "RSS + Media overlap; you saved this author's last two."),
+  A(14, "Duotone printing on a home laser", "Print Rough", "4d", 13, ["Craft"], 44, 5760, "#",
+    "A weekend method for two-color screen effects without a press.",
+    "Charming, practical, and probably irrelevant to what you are working on this month.",
+    "Craft is a cold classification for you — nothing rated in six weeks."),
+];
+
+const LEVEL = (s) => (s >= 75 ? "clear" : s >= 50 ? "maybe" : "rain");
+const LEVEL_LABEL = { clear: "Likely", maybe: "Maybe", rain: "Probably not" };
+const LEVEL_COLOR = { clear: "var(--color-accent-700)", maybe: "var(--color-neutral-700)", rain: "var(--color-neutral-600)" };
+
+class Component extends DCLogic {
+  state = {
+    view: "inbox",
+    topic: null,
+    query: "",
+    level: "all",
+    minRating: 0,
+    sort: "forecast",
+    selId: 1,
+    mobile: false,
+    ratings: { 12: 5, 13: 4, 2: 5, 9: 1 },
+    saved: { 5: true, 6: true, 12: true },
+    dismissed: { 10: true },
+  };
+
+  componentDidMount() {
+    this.onKey = (e) => {
+      if (e.target && /INPUT|TEXTAREA/.test(e.target.tagName)) return;
+      const list = this.visible();
+      const i = list.findIndex((a) => a.id === this.state.selId);
+      if (e.key === "j" || e.key === "ArrowDown") { e.preventDefault(); this.select(list[Math.min(i + 1, list.length - 1)]); }
+      else if (e.key === "k" || e.key === "ArrowUp") { e.preventDefault(); this.select(list[Math.max(i - 1, 0)]); }
+      else if (e.key >= "1" && e.key <= "5") this.rate(this.state.selId, +e.key);
+      else if (e.key === "s") this.toggleSave(this.state.selId);
+      else if (e.key === "x") { this.dismiss(this.state.selId); this.select(list[Math.min(i + 1, list.length - 1)]); }
+      else if (e.key === "Enter") { const a = SEED.find((x) => x.id === this.state.selId); if (a) window.open(a.url, "_blank", "noopener"); }
+      else if (e.key === "Escape" && this.state.mobile) this.setState({ mobile: false });
+    };
+    window.addEventListener("keydown", this.onKey);
+  }
+  componentWillUnmount() { window.removeEventListener("keydown", this.onKey); }
+
+  select(a) { if (a) this.setState({ selId: a.id }); }
+  rate(id, n) { this.setState((s) => ({ ratings: { ...s.ratings, [id]: s.ratings[id] === n ? 0 : n } })); }
+  toggleSave(id) { this.setState((s) => ({ saved: { ...s.saved, [id]: !s.saved[id] } })); }
+  dismiss(id) { this.setState((s) => ({ dismissed: { ...s.dismissed, [id]: !s.dismissed[id] } })); }
+
+  visible() {
+    const { view, topic, query, level, minRating, sort, saved, dismissed, ratings } = this.state;
+    const q = query.trim().toLowerCase();
+    let list = SEED.filter((a) => {
+      if (view === "inbox" && dismissed[a.id]) return false;
+      if (view === "saved" && !saved[a.id]) return false;
+      if (topic && !a.topics.includes(topic)) return false;
+      if (view === "search") {
+        if (level !== "all" && LEVEL(a.score) !== level) return false;
+        if (minRating && (ratings[a.id] || 0) < minRating) return false;
+      }
+      if (q && !(a.title + " " + a.source + " " + a.topics.join(" ")).toLowerCase().includes(q)) return false;
+      return true;
+    });
+    const by = view === "search" ? sort : "forecast";
+    if (by === "forecast") list = list.slice().sort((x, y) => y.score - x.score);
+    else if (by === "recent") list = list.slice().sort((x, y) => x.order - y.order);
+    else list = list.slice().sort((x, y) => (this.state.ratings[y.id] || 0) - (this.state.ratings[x.id] || 0));
+    return list;
+  }
+
+  starRow(id, size) {
+    const r = this.state.ratings[id] || 0;
+    return [1, 2, 3, 4, 5].map((v) => ({
+      value: v,
+      fill: v <= r ? "var(--color-accent)" : "transparent",
+      ring: v <= r ? "var(--color-accent)" : "color-mix(in srgb, var(--color-text) 25%, transparent)",
+      onRate: (e) => { if (e) e.stopPropagation(); this.rate(id, v); },
+    }));
+  }
+
+  renderVals() {
+    const s = this.state;
+    const list = this.visible();
+    const sel = SEED.find((a) => a.id === s.selId) || SEED[0];
+    const selLevel = LEVEL(sel.score);
+
+    const counts = {};
+    SEED.forEach((a) => a.topics.forEach((t) => { counts[t] = (counts[t] || 0) + 1; }));
+    const topicNames = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+
+    const pick = (key, val) => () => this.setState({ [key]: val });
+    const seg = (active) => ({
+      bg: active ? "var(--color-accent)" : "transparent",
+      fg: active ? "var(--color-bg)" : "color-mix(in srgb, var(--color-text) 68%, transparent)",
+    });
+
+    const dist = [1, 2, 3, 4, 5].map((n) => {
+      const c = Object.values(s.ratings).filter((r) => r === n).length + [3, 9, 14, 22, 11][n - 1];
+      return {
+        count: c, pct: Math.round((c / 30) * 100) + "%",
+        pips: Array.from({ length: 5 }, (_, i) => ({
+          fill: i < n ? "var(--color-accent)" : "transparent",
+          ring: i < n ? "var(--color-accent)" : "color-mix(in srgb, var(--color-text) 22%, transparent)",
+        })),
+      };
+    });
+
+    const weekData = [[6, 4], [9, 3], [5, 6], [11, 2], [8, 5], [12, 3], [7, 7], [14, 2], [10, 4], [13, 3], [9, 5], [15, 2]];
+    const maxWeek = 18;
+
+    const tStats = [
+      ["RSS", 11, 9, "4.6", "91%"], ["Engineering", 24, 18, "4.2", "86%"], ["Attention", 9, 8, "4.4", "83%"],
+      ["Longread", 14, 7, "3.9", "74%"], ["Media", 16, 11, "3.7", "69%"], ["Urbanism", 7, 3, "3.4", "58%"],
+      ["AI", 21, 9, "3.1", "47%"], ["Craft", 4, 1, "2.6", "38%"],
+    ].map(([name, sv, rd, avg, hit]) => ({
+      name, saved: sv, read: rd, avg, hit,
+      hitColor: parseInt(hit) >= 70 ? "var(--color-accent)" : "var(--color-neutral-500)",
+    }));
+
+    return {
+      views: [["inbox", "Inbox"], ["saved", "Saved"], ["search", "Search"], ["stats", "Stats"]].map(([v, label]) => ({
+        label, ...seg(s.view === v), onPick: pick("view", v),
+      })),
+      isList: s.view !== "stats",
+      isStats: s.view === "stats",
+      isSearch: s.view === "search",
+
+      isEmpty: list.length === 0,
+      mobile: s.mobile,
+      onToggleMobile: () => this.setState({ mobile: !s.mobile }),
+      onAdd: () => {},
+      query: s.query,
+      onQuery: (e) => this.setState({ query: e.target.value }),
+      countLabel: s.view === "stats"
+        ? "last 90 days"
+        : list.length + (s.view === "saved" ? " saved" : " unread") + (s.topic ? " · " + s.topic : ""),
+
+      topics: [{ name: "All classifications", key: null, count: SEED.length }]
+        .concat(topicNames.map((t) => ({ name: t, key: t, count: counts[t] })))
+        .map((t) => ({
+          name: t.name, count: t.count,
+          bar: s.topic === t.key ? "var(--color-accent)" : "transparent",
+          bg: s.topic === t.key ? "color-mix(in srgb, var(--color-accent) 12%, transparent)" : "transparent",
+          fg: s.topic === t.key ? "var(--color-accent-900)" : "color-mix(in srgb, var(--color-text) 78%, transparent)",
+          onPick: pick("topic", t.key),
+        })),
+
+      levelFilters: [["all", "All"], ["clear", "Likely"], ["maybe", "Maybe"], ["rain", "Unlikely"]]
+        .map(([v, label]) => ({ label, ...seg(s.level === v), onPick: pick("level", v) })),
+      ratingFilters: [0, 1, 2, 3, 4, 5].map((n) => ({
+        label: n === 0 ? "Any" : n + "+", ...seg(s.minRating === n), onPick: pick("minRating", n),
+      })),
+      sorts: [["forecast", "Forecast"], ["recent", "Newest"], ["rating", "Rating"]]
+        .map(([v, label]) => ({ label, ...seg(s.sort === v), onPick: pick("sort", v) })),
+
+      rows: list.map((a) => {
+        const lv = LEVEL(a.score);
+        const isSel = a.id === s.selId;
+        return {
+          title: a.title, source: a.source, when: a.when, minutes: a.minutes, score: a.score,
+          topics: a.topics.slice(0, 2).map((n) => ({ name: n })),
+          isClear: lv === "clear", isMaybe: lv === "maybe", isRain: lv === "rain",
+          scoreColor: lv === "clear" ? "var(--color-accent-700)" : "color-mix(in srgb, var(--color-text) 40%, transparent)",
+          titleColor: lv === "rain" ? "color-mix(in srgb, var(--color-text) 55%, transparent)" : "var(--color-text)",
+          opacity: s.dismissed[a.id] ? 0.4 : 1,
+          bg: isSel ? "color-mix(in srgb, var(--color-accent) 9%, transparent)" : "transparent",
+          edge: isSel ? "var(--color-accent)" : "transparent",
+          stars: this.starRow(a.id),
+          saveBg: s.saved[a.id] ? "var(--color-accent)" : "transparent",
+          saveFg: s.saved[a.id] ? "var(--color-bg)" : "color-mix(in srgb, var(--color-text) 40%, transparent)",
+          saveBorder: s.saved[a.id] ? "var(--color-accent)" : "var(--color-divider)",
+          onOpen: () => { this.setState({ selId: a.id }); window.open(a.url, "_blank", "noopener"); },
+          onSave: (e) => { e.stopPropagation(); this.toggleSave(a.id); },
+          onDismiss: (e) => { e.stopPropagation(); this.dismiss(a.id); },
+        };
+      }),
+
+      sel: {
+        title: sel.title, source: sel.source, when: sel.when, minutes: sel.minutes, score: sel.score,
+        url: sel.url, excerpt: sel.e1, excerpt2: sel.e2, reason: sel.reason,
+        topics: sel.topics.map((n) => ({ name: n })),
+        isClear: selLevel === "clear", isMaybe: selLevel === "maybe", isRain: selLevel === "rain",
+        levelLabel: LEVEL_LABEL[selLevel], levelColor: LEVEL_COLOR[selLevel],
+        stars: this.starRow(sel.id),
+        ratingNote: s.ratings[sel.id] ? "rated" : "not rated yet",
+        saveLabel: s.saved[sel.id] ? "Saved" : "Save",
+        onSave: () => this.toggleSave(sel.id),
+        onDismiss: () => this.dismiss(sel.id),
+        onAddTopic: () => {},
+      },
+
+      kpis: [
+        { label: "Read · 30 days", value: "63", note: "+11 vs previous" },
+        { label: "Average rating", value: "3.8", note: "of 148 rated" },
+        { label: "Forecast hit rate", value: "78%", note: "likely → rated 4+" },
+        { label: "Hours reading", value: "9.4", note: "9 min median" },
+      ],
+      dist,
+      weeks: weekData.map(([read, skip]) => ({
+        readPct: Math.round((read / maxWeek) * 100) + "%",
+        skipPct: Math.round((skip / maxWeek) * 100) + "%",
+      })),
+      topicStats: tStats,
+    };
+  }
+}
+</script>
+</body>
+</html>

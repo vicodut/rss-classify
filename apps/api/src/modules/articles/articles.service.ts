@@ -104,6 +104,42 @@ export class ArticlesService {
     return data ? articleFromRow(data) : null;
   }
 
+  async toggleSave(db: TypedSupabaseClient, id: string): Promise<Article | null> {
+    return this.toggleFlag(db, id, "is_saved");
+  }
+
+  async toggleDismiss(db: TypedSupabaseClient, id: string): Promise<Article | null> {
+    return this.toggleFlag(db, id, "is_dismissed");
+  }
+
+  private async toggleFlag(
+    db: TypedSupabaseClient,
+    id: string,
+    column: "is_saved" | "is_dismissed",
+  ): Promise<Article | null> {
+    const { data: current, error: fetchError } = await db
+      .from("articles")
+      .select("is_saved, is_dismissed")
+      .eq("id", id)
+      .maybeSingle();
+    if (fetchError) throw fetchError;
+    if (!current) return null;
+
+    const update =
+      column === "is_saved"
+        ? { is_saved: !current.is_saved }
+        : { is_dismissed: !current.is_dismissed };
+
+    const { data, error } = await db
+      .from("articles")
+      .update(update)
+      .eq("id", id)
+      .select("*")
+      .maybeSingle();
+    if (error) throw error;
+    return data ? articleFromRow(data) : null;
+  }
+
   /**
    * Rate an article, run the Phase 2 learning update on the user's tag
    * weights, and recalculate predicted_score for the user's unrated
@@ -133,7 +169,7 @@ export class ArticlesService {
       const tags = body.tags ?? articleRow.tags;
       const newTagWeights = this.scoring.learnFromRating(profileRow.tag_weights, tags, body.rating);
       const weights = { tagWeights: newTagWeights, keywordWeights: profileRow.keyword_weights };
-      const newScore = this.scoring.scoreArticle(
+      const { score: newScore, reason: newReason } = this.scoring.scoreArticle(
         { tags, title: articleRow.title, content: articleRow.content },
         weights,
       );
@@ -157,7 +193,7 @@ export class ArticlesService {
       const updatedRow = yield* Effect.tryPromise(async () => {
         const { data, error } = await db
           .from("articles")
-          .update({ tags, user_rating: body.rating, predicted_score: newScore })
+          .update({ tags, user_rating: body.rating, predicted_score: newScore, reason: newReason })
           .eq("id", id)
           .select("*")
           .single();
@@ -179,11 +215,14 @@ export class ArticlesService {
         unrated,
         (row) =>
           Effect.tryPromise(async () => {
-            const score = this.scoring.scoreArticle(
+            const { score, reason } = this.scoring.scoreArticle(
               { tags: row.tags, title: row.title, content: row.content },
               weights,
             );
-            const { error } = await db.from("articles").update({ predicted_score: score }).eq("id", row.id);
+            const { error } = await db
+              .from("articles")
+              .update({ predicted_score: score, reason })
+              .eq("id", row.id);
             if (error) throw error;
           }).pipe(Effect.ignore),
         { concurrency: 5 },

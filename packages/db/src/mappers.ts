@@ -15,6 +15,9 @@ export function articleFromRow(row: ArticleRow): Article {
     createdAt: row.created_at,
     publishedAt: row.published_at,
     sourceId: row.source_id,
+    isSaved: row.is_saved,
+    isDismissed: row.is_dismissed,
+    reason: row.reason,
   };
 }
 

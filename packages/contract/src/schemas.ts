@@ -25,6 +25,9 @@ export const articleSchema = z.object({
   createdAt: z.string().datetime(),
   publishedAt: z.string().datetime().nullable(),
   sourceId: z.string().uuid().nullable(),
+  isSaved: z.boolean(),
+  isDismissed: z.boolean(),
+  reason: z.string().nullable(),
 });
 export type Article = z.infer<typeof articleSchema>;
 
@@ -33,7 +36,7 @@ export const listArticlesQuerySchema = z.object({
   source: z.string().optional(),
   minScore: z.coerce.number().min(0).max(5).optional(),
   sourceId: z.string().uuid().optional(),
-  limit: z.coerce.number().int().min(1).max(100).default(20),
+  limit: z.coerce.number().int().min(1).max(500).default(20),
   cursor: z.string().optional(),
 });
 export type ListArticlesQuery = z.infer<typeof listArticlesQuerySchema>;

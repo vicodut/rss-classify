@@ -22,19 +22,48 @@ export interface PreferenceWeights {
  * in, returns numbers/weights out. Callers (articles/feeds services) own all
  * DB reads and writes.
  */
+export interface ScoredArticle {
+  score: number;
+  reason: string;
+}
+
 @injectable()
 export class ScoringService {
-  scoreArticle(article: ScorableArticle, weights: PreferenceWeights): number {
-    const tagScore = average(article.tags.map((tag) => weights.tagWeights[tag] ?? 0));
+  scoreArticle(article: ScorableArticle, weights: PreferenceWeights): ScoredArticle {
+    const tagScore = average(article.tags.map((tag) => weights.tagWeights[tag] ?? 0.5));
 
     const text = `${article.title} ${article.content ?? ""}`.toLowerCase();
     const matchedKeywords = Object.keys(weights.keywordWeights).filter((keyword) =>
       text.includes(keyword.toLowerCase()),
     );
-    const keywordScore = average(matchedKeywords.map((keyword) => weights.keywordWeights[keyword] ?? 0));
+    const keywordScore = average(matchedKeywords.map((keyword) => weights.keywordWeights[keyword] ?? 0.5));
 
-    const score = tagScore * 0.6 + keywordScore * 0.4;
-    return clamp(score, 0, 5);
+    const score = clamp(tagScore * 0.6 + keywordScore * 0.4, 0, 5);
+    return { score, reason: this.explainScore(article.tags, weights) };
+  }
+
+  /**
+   * Pure, no DB access — grounded only in the tag weights already loaded for
+   * this scoring pass, not fabricated rating-history claims.
+   */
+  explainScore(tags: string[], weights: PreferenceWeights): string {
+    if (tags.length === 0) {
+      return "No classification matched; scored on default weighting.";
+    }
+
+    const tagList = tags.join(", ");
+    const weighted = tags
+      .map((tag) => ({ tag, weight: weights.tagWeights[tag] ?? 0.5 }))
+      .sort((a, b) => b.weight - a.weight);
+
+    if (weighted.every((w) => w.weight === 0.5)) {
+      const plural = tags.length > 1 ? "these classifications" : "this classification";
+      return `Tagged ${tagList} — no rating history yet for ${plural}.`;
+    }
+
+    const top = weighted[0]!;
+    const pct = Math.round(top.weight * 100);
+    return `Tagged ${tagList} — your affinity for ${top.tag} is ${pct}%, the strongest signal here.`;
   }
 
   /**

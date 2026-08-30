@@ -95,6 +95,28 @@ const articlesContract = c.router(
       },
       summary: "Delete an article",
     },
+    toggleSave: {
+      method: "POST",
+      path: "/articles/:id/save",
+      body: z.object({}).optional(),
+      responses: {
+        200: articleSchema,
+        401: errorResponseSchema,
+        404: errorResponseSchema,
+      },
+      summary: "Toggle whether an article is saved for later",
+    },
+    toggleDismiss: {
+      method: "POST",
+      path: "/articles/:id/dismiss",
+      body: z.object({}).optional(),
+      responses: {
+        200: articleSchema,
+        401: errorResponseSchema,
+        404: errorResponseSchema,
+      },
+      summary: "Toggle whether an article is dismissed from the inbox",
+    },
   },
   { baseHeaders: authHeaders },
 );

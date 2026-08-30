@@ -1,51 +1,200 @@
-import { useState } from "react";
-import { useAuth } from "../auth/AuthProvider";
+import { useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import type { Article } from "@rss-agg/contract";
+import { tsr } from "../lib/api-client";
 import { supabase } from "../lib/supabase";
-import { TagFilters } from "../components/TagFilters";
-import { ArticleList } from "../components/ArticleList";
-import { FeedManager } from "../components/FeedManager";
+import { apiErrorMessage } from "../lib/errors";
+import { useArticleMutations } from "../lib/useArticleMutations";
+import {
+  ARTICLES_QUERY_KEY,
+  ARTICLES_QUERY_LIMIT,
+  initialReaderState,
+  visibleArticles,
+  type Level,
+  type ReaderState,
+  type Sort,
+  type View,
+} from "../lib/reader";
+import { Header } from "../components/reader/Header";
+import { NavRail } from "../components/reader/NavRail";
+import { SearchFilters } from "../components/reader/SearchFilters";
+import { WhyStrip } from "../components/reader/WhyStrip";
+import { ArticleRow } from "../components/reader/ArticleRow";
+import { StatsView } from "../components/reader/StatsView";
+import { PhoneOverlay } from "../components/reader/PhoneOverlay";
+import { useReaderKeyboard } from "../components/reader/useReaderKeyboard";
 
 export function HomePage() {
-  const { session } = useAuth();
-  const [selectedTag, setSelectedTag] = useState<string | null>(null);
-  const [feedsOpen, setFeedsOpen] = useState(false);
+  const [state, setState] = useState<ReaderState>(initialReaderState);
+  const queryClient = useQueryClient();
+
+  const { data, isLoading, error } = tsr.articles.list.useQuery({
+    queryKey: ARTICLES_QUERY_KEY,
+    queryData: { query: { limit: ARTICLES_QUERY_LIMIT } },
+  });
+  const articles: Article[] = useMemo(
+    () => (data?.status === 200 ? data.body.items : []),
+    [data],
+  );
+
+  const articlesById = useMemo(() => new Map(articles.map((a) => [a.id, a])), [articles]);
+  const visible = useMemo(() => visibleArticles(articles, state), [articles, state]);
+  const selArticle =
+    (state.selId && articlesById.get(state.selId)) || visible[0] || articles[0] || null;
+
+  const { rate, toggleSave, toggleDismiss } = useArticleMutations();
+
+  const createFeed = tsr.feeds.create.useMutation();
+  const refreshFeed = tsr.feeds.refresh.useMutation();
+
+  function setView(view: View) {
+    setState((s) => ({ ...s, view }));
+  }
+  function setTopic(topic: string | null) {
+    setState((s) => ({ ...s, topic }));
+  }
+  function setQuery(query: string) {
+    setState((s) => ({ ...s, query }));
+  }
+  function setLevel(level: Level) {
+    setState((s) => ({ ...s, level }));
+  }
+  function setMinRating(minRating: number) {
+    setState((s) => ({ ...s, minRating }));
+  }
+  function setSort(sort: Sort) {
+    setState((s) => ({ ...s, sort }));
+  }
+  function select(id: string) {
+    setState((s) => ({ ...s, selId: id }));
+  }
+  function setMobile(mobile: boolean) {
+    setState((s) => ({ ...s, mobile }));
+  }
+
+  function handleAddLink() {
+    const url = window.prompt("Feed URL (RSS/Atom)");
+    if (!url) return;
+    createFeed.mutate(
+      { body: { url } },
+      {
+        onSuccess: (res) => {
+          if (res.status !== 201) return;
+          refreshFeed.mutate(
+            { body: { feedId: res.body.id } },
+            { onSuccess: () => queryClient.invalidateQueries({ queryKey: ["articles"] }) },
+          );
+        },
+        onError: (err) => {
+          window.alert(apiErrorMessage(err, "Could not add that feed."));
+        },
+      },
+    );
+  }
+
+  useReaderKeyboard({
+    visible,
+    selId: state.selId,
+    articlesById,
+    onSelect: select,
+    onRate: rate,
+    onToggleSave: toggleSave,
+    onDismiss: toggleDismiss,
+    mobile: state.mobile,
+    onCloseMobile: () => setMobile(false),
+  });
+
+  const countLabel =
+    state.view === "stats"
+      ? "last 90 days"
+      : `${visible.length}${state.view === "saved" ? " saved" : " unread"}${
+          state.topic ? " · " + state.topic : ""
+        }`;
+
+  const isList = state.view !== "stats";
 
   return (
-    <div className="min-h-screen bg-neutral-50">
-      <header className="border-b border-neutral-200 bg-white px-8 py-4">
-        <div className="mx-auto flex max-w-6xl items-center justify-between">
-          <h1 className="text-2xl font-semibold text-neutral-900">RSS Aggregator</h1>
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => setFeedsOpen((open) => !open)}
-              className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
-            >
-              {feedsOpen ? "Hide feeds" : "Manage feeds"}
-            </button>
-            <button
-              onClick={() => supabase.auth.signOut()}
-              className="text-sm text-neutral-500 hover:text-neutral-800"
-            >
-              Sign out ({session?.user.email})
-            </button>
-          </div>
-        </div>
-      </header>
+    <div className="grid h-screen" style={{ gridTemplateRows: "auto 1fr" }}>
+      <Header
+        view={state.view}
+        onChangeView={setView}
+        countLabel={countLabel}
+        onTogglePhone={() => setMobile(!state.mobile)}
+        onAddLink={handleAddLink}
+        onSignOut={() => supabase.auth.signOut()}
+      />
 
-      <main className="mx-auto max-w-6xl px-8 py-6">
-        <div className="flex flex-col gap-6 lg:flex-row">
-          {feedsOpen && (
-            <aside className="rounded-lg border border-neutral-200 bg-white p-4 lg:w-80 lg:shrink-0">
-              <FeedManager />
-            </aside>
+      <div className="grid min-h-0" style={{ gridTemplateColumns: "minmax(0, 210px) minmax(0, 1fr)" }}>
+        <NavRail articles={articles} topic={state.topic} onPickTopic={setTopic} />
+
+        <main className="reader-scroll min-w-0 overflow-y-auto">
+          {isLoading && (
+            <p className="p-6 text-[13px] text-[color-mix(in_srgb,var(--color-text)_42%,transparent)]">
+              Loading articles…
+            </p>
+          )}
+          {error && (
+            <p className="p-6 text-[13px] text-[color-mix(in_srgb,var(--color-text)_42%,transparent)]">
+              Failed to load articles: {apiErrorMessage(error)}
+            </p>
           )}
 
-          <div className="min-w-0 flex-1 space-y-4">
-            <TagFilters selectedTag={selectedTag} onChange={setSelectedTag} />
-            <ArticleList tag={selectedTag} />
-          </div>
-        </div>
-      </main>
+          {!isLoading && !error && state.view === "search" && (
+            <SearchFilters
+              query={state.query}
+              onQueryChange={setQuery}
+              level={state.level}
+              onLevelChange={setLevel}
+              minRating={state.minRating}
+              onMinRatingChange={setMinRating}
+              sort={state.sort}
+              onSortChange={setSort}
+            />
+          )}
+
+          {!isLoading && !error && isList && (
+            <>
+              {selArticle && <WhyStrip article={selArticle} />}
+              <div>
+                {visible.map((a) => (
+                  <ArticleRow
+                    key={a.id}
+                    article={a}
+                    selected={a.id === selArticle?.id}
+                    onSelect={() => select(a.id)}
+                    onRate={(v) => rate(a, v)}
+                    onSave={() => toggleSave(a)}
+                    onDismiss={() => toggleDismiss(a)}
+                  />
+                ))}
+                {visible.length === 0 && (
+                  <div className="p-[70px_22px] text-center text-[13px] text-[color-mix(in_srgb,var(--color-text)_42%,transparent)]">
+                    Nothing matches this view.
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          {!isLoading && !error && state.view === "stats" && <StatsView articles={articles} />}
+        </main>
+      </div>
+
+      {state.mobile && (
+        <PhoneOverlay
+          view={state.view}
+          onChangeView={setView}
+          onClose={() => setMobile(false)}
+          rows={visible}
+          allArticles={articles}
+          selId={selArticle?.id ?? null}
+          onSelect={select}
+          onRate={rate}
+          onSave={toggleSave}
+          onDismiss={toggleDismiss}
+          countLabel={countLabel}
+        />
+      )}
     </div>
   );
 }

@@ -52,6 +52,16 @@ export async function registerArticlesModule(app: FastifyInstance) {
       if (!removed) return { status: 404, body: { error: { message: "Article not found" } } };
       return { status: 200, body: { success: true as const } };
     },
+    toggleSave: async ({ params, request }) => {
+      const article = await service.toggleSave(request.db, params.id);
+      if (!article) return { status: 404, body: { error: { message: "Article not found" } } };
+      return { status: 200, body: article };
+    },
+    toggleDismiss: async ({ params, request }) => {
+      const article = await service.toggleDismiss(request.db, params.id);
+      if (!article) return { status: 404, body: { error: { message: "Article not found" } } };
+      return { status: 200, body: article };
+    },
   });
 
   await app.register(s.plugin(articlesRouter));

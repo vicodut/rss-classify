@@ -17,6 +17,9 @@ export type ArticleRow = {
   created_at: string;
   published_at: string | null;
   source_id: string | null;
+  is_saved: boolean;
+  is_dismissed: boolean;
+  reason: string | null;
 };
 
 export type FeedRow = {

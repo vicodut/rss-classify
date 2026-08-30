@@ -92,7 +92,7 @@ export class FeedsService {
           Effect.gen(this, function* () {
             const rows = parsed.items.map((item) => {
               const tags = this.tagging.tagArticle(item.title, item.content);
-              const predictedScore = this.scoring.scoreArticle(
+              const { score, reason } = this.scoring.scoreArticle(
                 { tags, title: item.title, content: item.content },
                 weights,
               );
@@ -104,7 +104,8 @@ export class FeedsService {
                 content: item.content,
                 source: feed.title ?? parsed.title ?? null,
                 tags,
-                predicted_score: predictedScore,
+                predicted_score: score,
+                reason,
                 published_at: item.publishedAt,
               };
             });
