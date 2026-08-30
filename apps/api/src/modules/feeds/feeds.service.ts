@@ -6,7 +6,8 @@ import type { AppConfig } from "../../core/config.js";
 import { APP_CONFIG } from "../../core/types.js";
 import { toError } from "../../common/utils/supabase.js";
 import { ScoringService, type PreferenceWeights } from "../scoring/scoring.service.js";
-import { ClassificationService, type TagKnnSettings } from "../scoring/classification.service.js";
+import { ClassificationService } from "../scoring/classification.service.js";
+import { KeywordTaggingService, type CorpusStats } from "../scoring/keyword-tagging.service.js";
 import { EmbeddingsService, prepareTextForEmbedding } from "../embeddings/embeddings.service.js";
 import { fetchFeed } from "./feeds.parser.js";
 
@@ -32,6 +33,7 @@ export class FeedsService {
     @inject(APP_CONFIG) private readonly config: AppConfig,
     @inject(ScoringService) private readonly scoring: ScoringService,
     @inject(ClassificationService) private readonly classification: ClassificationService,
+    @inject(KeywordTaggingService) private readonly tagging: KeywordTaggingService,
     @inject(EmbeddingsService) private readonly embeddings: EmbeddingsService,
   ) {}
 
@@ -75,13 +77,16 @@ export class FeedsService {
    * Fetches one feed, tags + scores its new items, and upserts them
    * (deduped on the (user_id, url) unique constraint). Never fails — errors
    * are reported in the returned outcome so a bad feed doesn't abort a
-   * concurrent batch (see refresh() / feeds.scheduler.ts).
+   * concurrent batch (see refresh() / feeds.scheduler.ts). `corpus` is built
+   * once per refresh() call (see below) and shared across every feed/item in
+   * that batch rather than recomputed per item.
    */
   refreshOneFeed(
     db: TypedSupabaseClient,
     feed: FeedRow,
     weights: PreferenceWeights,
-    tagKnn: TagKnnSettings,
+    corpus: CorpusStats,
+    scoringNeighborCount: number,
   ): Effect.Effect<FeedRefreshOutcome, never> {
     return fetchFeed(feed.url, this.config.RSS_FETCH_TIMEOUT_MS).pipe(
       Effect.matchEffect({
@@ -105,11 +110,9 @@ export class FeedsService {
               (item, index) =>
                 Effect.gen(this, function* () {
                   const embedding = embeddings[index]!;
-                  const tags = yield* Effect.tryPromise(() =>
-                    this.classification.classifyTags(db, feed.user_id, embedding, tagKnn),
-                  ).pipe(Effect.orDie);
+                  const tags = this.tagging.extractTags(item.title, item.content, corpus);
                   const ratedNeighbors = yield* Effect.tryPromise(() =>
-                    this.classification.findRatedNeighbors(db, feed.user_id, embedding, tagKnn.k),
+                    this.classification.findRatedNeighbors(db, feed.user_id, embedding, scoringNeighborCount),
                   ).pipe(Effect.orDie);
                   const { score, reason } = this.scoring.scoreArticle(
                     { tags, title: item.title, content: item.content },
@@ -190,17 +193,21 @@ export class FeedsService {
       const weights: PreferenceWeights = profileRow
         ? { tagWeights: profileRow.tag_weights, keywordWeights: profileRow.keyword_weights }
         : { tagWeights: {}, keywordWeights: {} };
-      const tagKnn: TagKnnSettings = profileRow
-        ? {
-            k: profileRow.tag_knn_k,
-            minVotes: profileRow.tag_knn_min_votes,
-            similarityFloor: profileRow.tag_knn_similarity_floor,
-          }
-        : { k: 10, minVotes: 2, similarityFloor: 0.18 };
+      const scoringNeighborCount = profileRow?.tag_knn_k ?? 10;
+
+      // Built once per refresh, shared across every feed/item in this batch,
+      // from the user's existing articles — new items being ingested right
+      // now aren't in it yet, which is fine (and avoids weird self-reference
+      // for a large batch).
+      const corpus = yield* Effect.tryPromise(async () => {
+        const { data, error } = await db.from("articles").select("title, content");
+        if (error) throw toError(error);
+        return this.tagging.buildCorpusStats(data ?? []);
+      }).pipe(Effect.orDie);
 
       const outcomes = yield* Effect.forEach(
         feedRows,
-        (feed) => this.refreshOneFeed(db, feed, weights, tagKnn),
+        (feed) => this.refreshOneFeed(db, feed, weights, corpus, scoringNeighborCount),
         { concurrency: this.config.RSS_FETCH_CONCURRENCY },
       );
 

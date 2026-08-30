@@ -6,7 +6,7 @@ import { createServiceRoleClient } from "@rss-agg/db";
 import { toError } from "../../common/utils/supabase.js";
 import type { AppConfig } from "../../core/config.js";
 import type { PreferenceWeights } from "../scoring/scoring.service.js";
-import type { TagKnnSettings } from "../scoring/classification.service.js";
+import { KeywordTaggingService, type CorpusStats } from "../scoring/keyword-tagging.service.js";
 import { FeedsService } from "./feeds.service.js";
 
 /**
@@ -15,7 +15,11 @@ import { FeedsService } from "./feeds.service.js";
  * since this job spans all users and there is no per-request bearer token
  * for RLS to key off of.
  */
-export async function refreshAllUsersFeeds(config: AppConfig, feedsService: FeedsService): Promise<void> {
+export async function refreshAllUsersFeeds(
+  config: AppConfig,
+  feedsService: FeedsService,
+  tagging: KeywordTaggingService,
+): Promise<void> {
   const db = createServiceRoleClient({
     url: config.SUPABASE_URL,
     anonKey: config.SUPABASE_ANON_KEY,
@@ -32,14 +36,23 @@ export async function refreshAllUsersFeeds(config: AppConfig, feedsService: Feed
   const weightsByUser = new Map<string, PreferenceWeights>(
     (profiles ?? []).map((p) => [p.id, { tagWeights: p.tag_weights, keywordWeights: p.keyword_weights }]),
   );
-  const tagKnnByUser = new Map<string, TagKnnSettings>(
-    (profiles ?? []).map((p) => [
-      p.id,
-      { k: p.tag_knn_k, minVotes: p.tag_knn_min_votes, similarityFloor: p.tag_knn_similarity_floor },
-    ]),
-  );
+  const scoringNeighborCountByUser = new Map<string, number>((profiles ?? []).map((p) => [p.id, p.tag_knn_k]));
   const fallbackWeights: PreferenceWeights = { tagWeights: {}, keywordWeights: {} };
-  const fallbackTagKnn: TagKnnSettings = { k: 10, minVotes: 2, similarityFloor: 0.18 };
+
+  // Corpus stats (for tag extraction) are per-user — each user's tag
+  // vocabulary is derived only from their own articles, never shared.
+  const { data: allArticles, error: articlesError } = await db.from("articles").select("user_id, title, content");
+  if (articlesError) throw toError(articlesError);
+  const articlesByUser = new Map<string, { title: string; content: string | null }[]>();
+  for (const row of allArticles ?? []) {
+    const list = articlesByUser.get(row.user_id) ?? [];
+    list.push({ title: row.title, content: row.content });
+    articlesByUser.set(row.user_id, list);
+  }
+  const corpusByUser = new Map<string, CorpusStats>(
+    [...articlesByUser.entries()].map(([userId, docs]) => [userId, tagging.buildCorpusStats(docs)]),
+  );
+  const emptyCorpus = tagging.buildCorpusStats([]);
 
   await Effect.runPromise(
     Effect.forEach(
@@ -49,7 +62,8 @@ export async function refreshAllUsersFeeds(config: AppConfig, feedsService: Feed
           db,
           feed,
           weightsByUser.get(feed.user_id) ?? fallbackWeights,
-          tagKnnByUser.get(feed.user_id) ?? fallbackTagKnn,
+          corpusByUser.get(feed.user_id) ?? emptyCorpus,
+          scoringNeighborCountByUser.get(feed.user_id) ?? 10,
         ),
       { concurrency: config.RSS_FETCH_CONCURRENCY },
     ),
@@ -62,10 +76,11 @@ export async function refreshAllUsersFeeds(config: AppConfig, feedsService: Feed
  */
 export function startFeedsScheduler(config: AppConfig, logger: FastifyBaseLogger): Job {
   const feedsService = container.resolve(FeedsService);
+  const tagging = container.resolve(KeywordTaggingService);
 
   const runAndReschedule = async () => {
     try {
-      await refreshAllUsersFeeds(config, feedsService);
+      await refreshAllUsersFeeds(config, feedsService, tagging);
       logger.info("Scheduled feed refresh completed");
     } catch (err) {
       logger.error({ err }, "Scheduled feed refresh failed");

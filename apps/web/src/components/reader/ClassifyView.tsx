@@ -9,10 +9,12 @@ interface ClassifyViewProps {
 }
 
 /**
- * Tags are open-ended (no fixed category list) — the k-NN classifier learns
- * entirely from articles you've manually tagged or rated. This page runs it
- * on demand rather than only automatically at feed-ingest time, since a
- * re-run benefits from every confirmation made since the last one.
+ * Tags are open-ended (no fixed category list) — extracted directly from
+ * each article's own content (TF-IDF over your corpus, not a vote against
+ * previously-assigned tags), so a term like "elixir" surfaces on its own
+ * once it's distinctive relative to the rest of your feed. This page runs
+ * it on demand rather than only automatically at feed-ingest time, since a
+ * re-run benefits from the corpus having grown since the last pass.
  */
 export function ClassifyView({ articles }: ClassifyViewProps) {
   const queryClient = useQueryClient();
@@ -40,12 +42,11 @@ export function ClassifyView({ articles }: ClassifyViewProps) {
     <div className="max-w-[560px] px-[26px] py-7">
       <h4 className="mb-4 text-[15px] uppercase tracking-[.1em]">Classify articles</h4>
       <p className="mb-6 text-[13px] leading-[1.6] text-[color-mix(in_srgb,var(--color-text)_62%,transparent)]">
-        Tags are learned from articles you&rsquo;ve manually tagged or rated — there&rsquo;s no
-        fixed category list. Running this looks at your {unconfirmed.length} not-yet-confirmed
-        article{unconfirmed.length === 1 ? "" : "s"} ({untagged.length} completely untagged) and
-        assigns tags by finding the closest matches among what you&rsquo;ve already confirmed.
-        Articles with no confident match are left as-is — tag or rate more articles, then run
-        this again.
+        Tags are extracted from each article&rsquo;s own content — no fixed category list, and
+        no dependency on tags you&rsquo;ve already confirmed. Running this looks at your{" "}
+        {unconfirmed.length} not-yet-confirmed article{unconfirmed.length === 1 ? "" : "s"} (
+        {untagged.length} completely untagged) and picks the 2-3 terms most distinctive to each
+        one relative to the rest of your feed.
       </p>
 
       <button
@@ -63,7 +64,7 @@ export function ClassifyView({ articles }: ClassifyViewProps) {
         <p className="mt-4 text-[13px] text-[color-mix(in_srgb,var(--color-text)_70%,transparent)]">
           Tagged {result.articlesTagged} of {result.candidatesConsidered} candidates considered.
           {result.candidatesConsidered > result.articlesTagged
-            ? " The rest didn't have a confident match yet."
+            ? " The rest had too little content to extract anything meaningful from."
             : ""}
         </p>
       )}

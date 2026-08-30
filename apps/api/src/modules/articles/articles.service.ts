@@ -11,6 +11,7 @@ import type { Article, ListArticlesQuery, RateArticleBody, UpdateArticleTagsBody
 import { toError, unwrap } from "../../common/utils/supabase.js";
 import { ScoringService } from "../scoring/scoring.service.js";
 import { ClassificationService } from "../scoring/classification.service.js";
+import { KeywordTaggingService } from "../scoring/keyword-tagging.service.js";
 import { ArticleNotFoundError, ProfileNotFoundError } from "./articles.errors.js";
 
 export interface Page<T> {
@@ -44,6 +45,7 @@ export class ArticlesService {
   constructor(
     @inject(ScoringService) private readonly scoring: ScoringService,
     @inject(ClassificationService) private readonly classification: ClassificationService,
+    @inject(KeywordTaggingService) private readonly tagging: KeywordTaggingService,
   ) {}
 
   async list(db: TypedSupabaseClient, query: ListArticlesQuery): Promise<Page<Article>> {
@@ -200,14 +202,15 @@ export class ArticlesService {
   }
 
   /**
-   * Manually (re)runs k-NN tag classification over the user's articles that
-   * aren't yet tags_confirmed — both genuinely untagged articles (ingest no
-   * longer auto-tags with a fixed taxonomy, see ClassificationService) and
-   * previously machine-guessed ones, so a re-run benefits from confirmations
-   * made since the last pass. Skips rows with no stored embedding yet (needs
-   * the backfill script). Recomputes predicted_score/reason alongside tags
-   * whenever a confident classification is found; leaves an article
-   * untouched when the classifier still can't confidently tag it.
+   * Manually (re)runs content-based tag extraction (KeywordTaggingService —
+   * TF-IDF over the user's own corpus, not a k-NN vote against previously
+   * assigned tags) over the user's articles that aren't yet tags_confirmed:
+   * both genuinely untagged articles and previously machine-tagged ones, so
+   * a re-run benefits from the corpus having grown since the last pass.
+   * Recomputes predicted_score/reason alongside tags. Unlike the old k-NN
+   * approach this never needs a "not enough data yet" empty result — a
+   * fresh article can always be tagged from its own content — so every
+   * candidate with any extractable content gets updated.
    */
   async classifyUnconfirmed(
     db: TypedSupabaseClient,
@@ -219,17 +222,16 @@ export class ArticlesService {
     if (!profileRow) return { candidatesConsidered: 0, articlesTagged: 0 };
 
     const weights = { tagWeights: profileRow.tag_weights, keywordWeights: profileRow.keyword_weights };
-    const tagKnn = {
-      k: profileRow.tag_knn_k,
-      minVotes: profileRow.tag_knn_min_votes,
-      similarityFloor: profileRow.tag_knn_similarity_floor,
-    };
+    const scoringNeighborCount = profileRow.tag_knn_k;
+
+    const { data: allArticles, error: corpusError } = await db.from("articles").select("title, content");
+    if (corpusError) throw toError(corpusError);
+    const corpus = this.tagging.buildCorpusStats(allArticles ?? []);
 
     const { data: rows, error } = await db
       .from("articles")
       .select("id, embedding, title, content")
       .eq("tags_confirmed", false)
-      .not("embedding", "is", null)
       .limit(limit);
     if (error) throw toError(error);
     const candidates = rows ?? [];
@@ -240,13 +242,13 @@ export class ArticlesService {
         candidates,
         (row) =>
           Effect.tryPromise(async () => {
-            const embedding = parseEmbedding(row.embedding);
-            if (!embedding) return;
-
-            const tags = await this.classification.classifyTags(db, userId, embedding, tagKnn);
+            const tags = this.tagging.extractTags(row.title, row.content, corpus);
             if (tags.length === 0) return;
 
-            const ratedNeighbors = await this.classification.findRatedNeighbors(db, userId, embedding, tagKnn.k);
+            const embedding = parseEmbedding(row.embedding);
+            const ratedNeighbors = embedding
+              ? await this.classification.findRatedNeighbors(db, userId, embedding, scoringNeighborCount)
+              : [];
             const { score, reason } = this.scoring.scoreArticle(
               { tags, title: row.title, content: row.content },
               weights,
