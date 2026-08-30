@@ -16,7 +16,13 @@ export async function createApp(config: AppConfig): Promise<FastifyInstance> {
   });
 
   await app.register(helmet);
-  await app.register(cors, { origin: config.CORS_ORIGIN });
+  await app.register(cors, {
+    // Vite falls back to the next free port (5174, 5175, ...) whenever its
+    // default is taken, so pinning dev CORS to a single configured origin is
+    // fragile — accept any localhost port instead. Production still enforces
+    // the exact configured origin.
+    origin: config.NODE_ENV === "development" ? /^http:\/\/localhost:\d+$/ : config.CORS_ORIGIN,
+  });
 
   app.setErrorHandler(globalErrorHandler);
 
