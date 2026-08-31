@@ -57,8 +57,8 @@ migrations against Supabase (see below).
 | `SUPABASE_URL` | Required | Project URL from Supabase |
 | `SUPABASE_ANON_KEY` | Required | Anon/publishable key |
 | `SUPABASE_SERVICE_ROLE_KEY` | Required | Service role/secret key |
-| `CORS_ORIGIN` | Required in production | Set to the **web** service's public Railway URL. Defaults to `http://localhost:5173`, which is wrong for a deployed frontend. |
-| `NODE_ENV` | Recommended | Set to `production` |
+| `CORS_ORIGIN` | Required | Set to the **web** service's exact public URL — scheme + host only, no trailing slash (e.g. `https://your-app.example.com`, not `.../`). Defaults to `http://localhost:5173`, wrong for a deployed frontend. **Only takes effect if `NODE_ENV=production` (see below) — otherwise it's silently ignored.** |
+| `NODE_ENV` | **Required** | Set to `production`. `app.ts`'s CORS setup branches on this: unless it's exactly `"production"`, the server uses a localhost-only regex for allowed origins and ignores `CORS_ORIGIN` entirely, regardless of what it's set to. Also controls log verbosity (`info` in dev, `warn` in prod) — if Railway's logs look chatty, this is unset. |
 | `PORT` | **Don't set** | Railway injects this automatically; the server already reads `process.env.PORT` and binds `0.0.0.0`. |
 | `RSS_FETCH_TIMEOUT_MS` | Optional | Default `10000` |
 | `RSS_FETCH_CONCURRENCY` | Optional | Default `3` |
